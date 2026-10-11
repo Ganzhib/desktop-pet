@@ -18,6 +18,7 @@
       <nav class="settings-tabs" role="tablist">
         <button id="tab-general" type="button" role="tab" data-tab="general" data-i18n="settings.tabs.general">通用</button>
         <button id="tab-character" type="button" role="tab" data-tab="character" data-i18n="settings.tabs.character">角色</button>
+        <button id="tab-memory" type="button" role="tab" data-tab="memory" data-i18n="settings.tabs.memory">共同记忆</button>
         <button id="tab-chat" type="button" role="tab" data-tab="chat" data-i18n="settings.tabs.chat">聊天</button>
         <button id="tab-voice" type="button" role="tab" data-tab="voice" data-i18n="settings.tabs.voice">语音</button>
       </nav>
@@ -32,6 +33,7 @@
           <select id="language"></select>
         </label>
         <p class="hint" data-i18n="language.hint">会影响菜单、窗口、提示气泡和默认对话语言。</p>
+        <label class="check-row"><input id="interaction-responses" type="checkbox" /><span data-i18n="settings.interactions">互动短句（自动表情模式）</span></label>
       </section>
       </div>
       <div id="page-character" role="tabpanel" aria-labelledby="tab-character" data-page="character" hidden>
@@ -100,6 +102,26 @@
         </label>
         <label class="check-row"><input id="remember-history" type="checkbox" /><span data-i18n="settings.remember">在本机保留此角色的聊天记录</span></label>
         <p class="hint" data-i18n="settings.rememberHint"></p>
+      </section>
+      </div>
+      <div id="page-memory" role="tabpanel" aria-labelledby="tab-memory" data-page="memory" hidden>
+      <section class="panel">
+        <div class="section-title">
+          <h2 data-i18n="settings.memory.title">共同记忆</h2>
+          <span id="memory-character"></span>
+        </div>
+        <label class="check-row"><input id="memory-enabled" type="checkbox" /><span data-i18n="settings.memory.enabled">在对话中使用这些记忆</span></label>
+        <p class="hint" data-i18n="settings.memory.privacy"></p>
+        <label>
+          <span data-i18n="settings.memory.notes">记忆清单（每行一条）</span>
+          <textarea id="memory-notes" rows="9" spellcheck="false" aria-describedby="memory-limit"></textarea>
+        </label>
+        <div class="button-row">
+          <button id="clear-memories" type="button" data-i18n="settings.memory.clear">清空清单</button>
+          <span id="memory-count" class="hint" role="status"></span>
+        </div>
+        <p id="memory-limit" class="hint" data-i18n="settings.memory.limit"></p>
+        <p class="hint" data-i18n="settings.memory.retention"></p>
       </section>
       </div>
       <div id="page-chat" role="tabpanel" aria-labelledby="tab-chat" data-page="chat" hidden>

@@ -31,6 +31,7 @@ const DEFAULT_SETTINGS = {
   language: "system",
   characterId: DEFAULT_CHARACTER_ID,
   expressionMode: "automatic",
+  interactionResponses: true,
   scale: 1,
   alwaysOnTop: true,
   restReminderMinutes: 0,
@@ -72,6 +73,7 @@ const DEFAULT_SETTINGS = {
     extraRules: "",
   },
   rememberHistory: false,
+  memory: { enabled: false, notes: [] },
   affection: {
     enabled: false,
     label: "好感",
@@ -163,6 +165,7 @@ async function confirmDiscard(event) {
 function sessionSnapshot() {
   return {
     persona: { ...settings.persona }, affection: { ...settings.affection },
+    memory: normalizeMemorySettings(settings.memory),
     profile: { ...profile }, rememberHistory: settings.rememberHistory === true,
     history: publicChatHistory(),
   };
@@ -206,6 +209,7 @@ function readCharacterSessions() {
 function loadCharacterSession(value = {}) {
   settings.persona = normalizePersonaSettings(value.persona);
   settings.affection = normalizeAffectionSettings(value.affection);
+  settings.memory = normalizeMemorySettings(value.memory);
   settings.rememberHistory = value.rememberHistory === true;
   profile = normalizeProfile({ ...DEFAULT_PROFILE, ...value.profile, lastChatAt: 0 });
   chatHistory = Array.isArray(value.history) ? value.history.slice(-80).filter((item) =>
@@ -313,8 +317,9 @@ function getCharacterPack(characterId = settings.characterId) {
 function publicSettings() {
   const { apiKey, ...assistant } = settings.assistant || DEFAULT_SETTINGS.assistant;
   const { apiKey: ttsApiKey, ...tts } = settings.tts || DEFAULT_SETTINGS.tts;
+  const { memory, ...petSettings } = settings;
   return {
-    ...settings,
+    ...petSettings,
     assistant: {
       ...assistant,
       hasApiKey: Boolean(apiKey),
@@ -404,6 +409,8 @@ function readStoredApiKey(rawAssistant) {
 
 function settingsForStorage() {
   const stored = JSON.parse(JSON.stringify(settings));
+  // Memories live only in their character session, not in global or legacy mirrors.
+  delete stored.memory;
   encryptStoredApiKey(stored.assistant);
   encryptStoredApiKey(stored.tts);
   return stored;
@@ -461,6 +468,7 @@ function normalizeSettings(nextSettings) {
     language,
     characterId,
     expressionMode,
+    interactionResponses: nextSettings.interactionResponses !== false,
     scale,
     alwaysOnTop,
     restReminderMinutes,
@@ -468,7 +476,17 @@ function normalizeSettings(nextSettings) {
     tts,
     persona,
     affection,
+    memory: normalizeMemorySettings(nextSettings.memory),
     rememberHistory: nextSettings.rememberHistory === true,
+  };
+}
+
+function normalizeMemorySettings(raw = {}) {
+  return {
+    enabled: raw?.enabled === true,
+    notes: Array.isArray(raw?.notes) ? raw.notes.slice(0, 20)
+      .filter((note) => typeof note === "string")
+      .map((note) => normalizeCompactText(note, 240)).filter(Boolean) : [],
   };
 }
 
@@ -835,10 +853,12 @@ function updateSettings(patch) {
       ...(settings.affection || DEFAULT_SETTINGS.affection),
       ...((patch && patch.affection) || {}),
     },
+    memory: { ...settings.memory, ...patch?.memory },
   };
   const normalized = normalizeSettings(nextSettings);
   if (normalized.characterId !== settings.characterId
     || JSON.stringify(normalized.persona) !== JSON.stringify(settings.persona)
+    || JSON.stringify(normalized.memory) !== JSON.stringify(settings.memory)
     || JSON.stringify(normalized.assistant) !== JSON.stringify(settings.assistant)) {
     cancelPendingChat();
   }
@@ -985,6 +1005,8 @@ function publicChatConfig() {
       canPersistApiKey: canPersistApiKey(),
     },
     persona: { ...(settings.persona || DEFAULT_SETTINGS.persona) },
+    memory: normalizeMemorySettings(settings.memory),
+    interactionResponses: settings.interactionResponses !== false,
     affection: { ...(settings.affection || DEFAULT_SETTINGS.affection) },
     rememberHistory: settings.rememberHistory === true,
     profile: {
@@ -1015,6 +1037,8 @@ function applyChatConfigPatch(patch = {}) {
     ttsPatch.enabled = ttsPatch.provider !== "none";
   }
   const settingsPatch = {
+    ...(patch.memory !== undefined ? { memory: patch.memory } : {}),
+    ...(patch.interactionResponses !== undefined ? { interactionResponses: patch.interactionResponses } : {}),
     ...(patch.rememberHistory !== undefined ? { rememberHistory: patch.rememberHistory } : {}),
     ...(patch.language !== undefined ? { language: patch.language } : {}),
     ...(patch.characterId !== undefined ? { characterId: patch.characterId } : {}),
@@ -1159,6 +1183,8 @@ function personaInstruction() {
       ? (persona.customRelationship ? t("prompt.relationshipCustom", { text: persona.customRelationship }) : "")
       : (persona.relationship !== "default" ? t(`prompt.relationship.${persona.relationship}`) : ""),
     settings.affection?.enabled ? affectionInstruction() : "",
+    settings.memory?.enabled && settings.memory.notes.length
+      ? t("prompt.memories", { notes: JSON.stringify(settings.memory.notes) }) : t("prompt.noMemories"),
     expressionInstruction(getCharacterPack()?.states || { idle: {} }),
     t("prompt.defaultLanguage"),
     t("prompt.privacy"),

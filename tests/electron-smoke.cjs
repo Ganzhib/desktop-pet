@@ -99,9 +99,12 @@ async function run() {
     assert.equal(state.settings.affection.enabled, false);
     const history = (await evaluate(pet, () => window.desktopPet.getChatState())).history;
     assert.ok(history.some((item) => item.content === "Remember this message"));
+    const memory = (await evaluate(pet, () => window.desktopPet.getChatState())).config.memory;
+    assert.deepEqual(memory, { enabled: true, notes: ["Enjoys piano on rainy days"] });
     await evaluate(pet, () => window.desktopPet.setSettings({ characterId: "luna" }));
     await until(() => evaluate(pet, async () => (await window.desktopPet.getAppState()).settings.characterId === "luna"), "restart character switch");
     assert.equal((await evaluate(pet, () => window.desktopPet.getChatState())).history.length, 0);
+    assert.deepEqual((await evaluate(pet, () => window.desktopPet.getChatState())).config.memory, { enabled: false, notes: [] });
     await evaluate(pet, () => window.desktopPet.setSettings({ characterId: "default" }));
     await delay(1100);
     assert.equal(BrowserWindow.getAllWindows().length, 1);
@@ -198,6 +201,44 @@ async function run() {
   assert.equal((await evaluate(chat, () => window.desktopPet.getChatState())).history.at(-1).failed, false);
   await screenshot(chat, "chat");
 
+  // Edit and save through the real settings page; only the isolated service receives notes.
+  assert.deepEqual((await evaluate(chat, () => window.desktopPet.getChatState())).config.memory, { enabled: false, notes: [] });
+  await evaluate(settings, () => {
+    document.querySelector("#tab-memory").click();
+    document.querySelector("#memory-enabled").checked = true;
+    document.querySelector("#memory-notes").value = "x".repeat(241);
+    document.querySelector("#save-settings").click();
+  });
+  assert.equal(await evaluate(settings, () => document.querySelector("#memory-notes").getAttribute("aria-invalid")), "true");
+  assert.equal(await evaluate(settings, () => document.querySelector("#tab-memory").getAttribute("aria-selected")), "true");
+  await evaluate(settings, () => {
+    document.querySelector("#memory-notes").value = "Enjoys piano on rainy days\nA note to delete";
+    document.querySelector("#memory-notes").dispatchEvent(new Event("input"));
+    document.querySelector("#save-settings").click();
+  });
+  await until(() => evaluate(chat, async () => (await window.desktopPet.getChatState()).config.memory.notes.length === 2), "memory saved");
+  await send("Memory context check");
+  assert.match(requests.at(-1).messages[0].content, /Enjoys piano on rainy days/);
+  await evaluate(settings, () => {
+    document.querySelector("#memory-enabled").checked = false;
+    document.querySelector("#save-settings").click();
+  });
+  await until(() => evaluate(chat, async () => !(await window.desktopPet.getChatState()).config.memory.enabled), "memory disabled");
+  await send("Memory off check");
+  assert.doesNotMatch(requests.at(-1).messages[0].content, /Enjoys piano on rainy days/);
+  await evaluate(settings, () => {
+    document.querySelector("#clear-memories").click();
+    document.querySelector("#save-settings").click();
+  });
+  await until(() => evaluate(chat, async () => (await window.desktopPet.getChatState()).config.memory.notes.length === 0), "memory deleted");
+  assert.doesNotMatch(fs.readFileSync(path.join(dataDir, "characters-state.json"), "utf8"), /A note to delete/);
+  await evaluate(settings, () => {
+    document.querySelector("#memory-enabled").checked = true;
+    document.querySelector("#memory-notes").value = "Enjoys piano on rainy days";
+    document.querySelector("#save-settings").click();
+  });
+  await until(() => evaluate(chat, async () => (await window.desktopPet.getChatState()).config.memory.notes.length === 1), "memory ready for restart");
+
   await evaluate(pet, () => document.querySelector("#talk").click());
   const quick = await findWindow("quick-chat.html");
   assert.equal(await evaluate(quick, () => document.querySelector("#character-name").textContent), "Test Character");
@@ -226,6 +267,8 @@ async function run() {
     document.querySelector("#send-message").click();
   });
   await until(() => evaluate(chat, () => document.querySelector("#messages").textContent.includes("First paragraph")), "incremental reply before completion");
+  assert.equal(await evaluate(pet, () => state), "waving");
+  await evaluate(pet, () => { handleClick("head"); handleLongPress(); handleDoubleClick(); });
   assert.equal(await evaluate(pet, () => state), "waving");
   await delay(1800);
   assert.equal(await evaluate(pet, () => state), "waving");
@@ -277,9 +320,30 @@ async function run() {
   assert.notEqual(nextFrame, initialFrame);
   await delay(1400);
   assert.equal(await evaluate(pet, () => document.querySelector("canvas").toDataURL()), nextFrame);
+  await evaluate(pet, () => {
+    document.querySelector("canvas").dispatchEvent(new PointerEvent("pointerdown", { button: 0 }));
+    didDrag = true;
+    setState("running");
+    window.dispatchEvent(new PointerEvent("pointerup", { button: 0, detail: 1 }));
+    handleLongPress();
+    handleDoubleClick();
+  });
+  assert.equal(await evaluate(pet, () => document.querySelector("canvas").toDataURL()), nextFrame);
   await screenshot(pet, "pet");
   await evaluate(pet, () => window.desktopPet.setSettings({ characterId: "default", expressionMode: "automatic" }));
   await until(() => evaluate(pet, () => character.id === "default" && spriteImage?.src.includes("/default/")), "default character restored");
+  await evaluate(pet, () => {
+    handlePetMessage({ clear: true });
+    const bounds = canvas.getBoundingClientRect();
+    canvas.dispatchEvent(new PointerEvent("pointerdown", { button: 0, clientY: bounds.top + bounds.height * 0.2 }));
+    window.dispatchEvent(new PointerEvent("pointerup", { button: 0, detail: 1 }));
+  });
+  await until(() => evaluate(pet, () => bubbleVisible && state === "review"), "local head touch");
+  assert.match(await evaluate(pet, () => speechBubble.textContent), /Alex/);
+  await screenshot(pet, "pet-touch");
+  const localResponse = await evaluate(pet, () => speechBubble.textContent);
+  await evaluate(pet, () => { handleClick("greet"); handleClick("head"); });
+  assert.equal(await evaluate(pet, () => speechBubble.textContent), localResponse);
 
   await evaluate(settings, (url) => window.desktopPet.saveChatConfig({ tts: { provider: "custom", enabled: true, endpoint: `${url}/tts`, customBodyTemplate: '{"text":"{{text}}"}' } }), endpoint);
   await evaluate(pet, () => {
@@ -348,10 +412,13 @@ async function run() {
   await send("Remember this message");
   // Exercise all setting tabs at the supported minimum window size.
   settings.setSize(560, 620);
-  for (const tab of ["general", "character", "chat", "voice"]) {
+  for (const tab of ["general", "character", "memory", "chat", "voice"]) {
     await evaluate(settings, (name) => document.querySelector(`#tab-${name}`).click(), tab);
     assert.equal(await evaluate(settings, () => document.documentElement.scrollWidth <= window.innerWidth), true);
     assert.equal(await evaluate(settings, () => document.querySelector("#save-settings").getBoundingClientRect().bottom <= window.innerHeight), true);
+    if (tab === "memory") {
+      assert.equal(await evaluate(settings, () => document.querySelector("#memory-enabled").getBoundingClientRect().top >= document.querySelector(".settings-tabs").getBoundingClientRect().bottom), true);
+    }
     await screenshot(settings, `settings-${tab}`);
   }
   await evaluate(settings, () => {
@@ -367,7 +434,7 @@ async function run() {
   for (const window of [pet, settings, chat, quick]) {
     assert.deepEqual(await evaluate(window, () => window.smokeErrors), []);
   }
-  console.log("Electron smoke PASS: startup, canvas, resizing, drafts, validation, settings tabs, streaming, stop, long replies, bubble hover, relationship settings, conversation holds, deferred reminders, context isolation, languages, click-only, voice lifecycle/GET/playback errors, import/preview/remove and optional history.");
+  console.log("Electron smoke PASS: startup, canvas, resizing, drafts, validation, settings tabs, streaming, stop, long replies, bubble hover, relationship settings, shared memory save/context/disable/delete, touch responses, manual drag restoration, conversation holds, deferred reminders, context isolation, languages, click-only, voice lifecycle/GET/playback errors, import/preview/remove and optional history.");
 }
 
 const watchdog = setTimeout(() => { console.error("Electron smoke timed out"); app.exit(1); }, 120000);

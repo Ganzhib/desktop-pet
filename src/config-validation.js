@@ -13,6 +13,14 @@
     const llm = config.assistant || {};
     const tts = config.tts || {};
     const error = (field, key) => ({ field, key: `validation.${key}` });
+    if (scope === "all" && config.memory !== undefined) {
+      const notes = config.memory?.notes;
+      if (!config.memory || typeof config.memory !== "object" || (notes !== undefined
+        && (!Array.isArray(notes) || notes.length > 20 || notes.some((note) =>
+          typeof note !== "string" || note.trim().length > 240 || /[\r\n]/.test(note))))) {
+        return error("memory-notes", "memories");
+      }
+    }
     if (scope !== "tts") {
       if (llm.baseUrl && !validUrl(llm.baseUrl)) return error("base-url", "url");
       if (complete && (llm.baseUrl || llm.model) && (!llm.baseUrl || !llm.model)) return error(llm.baseUrl ? "model" : "base-url", "model");

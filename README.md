@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
 
-**0.2.0 companion update:** character-side chat, preferred names and relationships, coordinated expressions and voice, more model presets, and character import. [Release notes](docs/releases/v0.2.0.md).
+**0.3.0 shared memories and touch responses:** optional memories for each character, gentle local interactions, and more reliable manual expression controls. [Release notes](docs/releases/v0.3.0.md).
 
 [![Build](https://github.com/TonyNa-code/desktop-pet/actions/workflows/build.yml/badge.svg)](https://github.com/TonyNa-code/desktop-pet/actions/workflows/build.yml)
 [![Latest Release](https://img.shields.io/github/v/release/TonyNa-code/desktop-pet?label=latest%20release)](https://github.com/TonyNa-code/desktop-pet/releases/latest)
@@ -141,14 +141,14 @@ API keys are stored only on this device. The app uses system secure storage when
 
 ### Companion Features
 
-Available in 0.2.0:
+Available in 0.3.0:
 
 - The pet's Talk button opens an input box beside the character. It follows the pet as it moves, shows the character's name, and links to history and settings. Replies remain in the pet bubble, including the full text of longer responses.
 - Replies can select an expression from the current character pack. Missing or unrecognized expressions stay neutral rather than guessing from emotional keywords. Click-only expression mode remains manual.
 - Conversation gestures play once and hold while the reply is visible, with no idle or hover interruption. Bubbles stay visible during voice generation and playback. Voice errors leave the text reply intact.
 - Break and focus reminders wait until the current reply is dismissed. Only the latest queued notice is kept, and notices older than a minute are discarded.
 - Standard editing shortcuts and input-field context menus support pasting API keys and messages.
-- Settings are grouped into General, Character, Chat and Voice, with a fixed save bar and unsaved-change confirmation.
+- Settings are grouped into General, Character, Memories, Chat and Voice, with a fixed save bar and unsaved-change confirmation.
 - Replies can stream as they arrive. Stop or retry a reply in Full Chat; Quick Input also supports stopping. Disable `Stream replies` for a service that only supports non-streaming requests.
 - Long replies keep their paragraphs. Pet bubbles stay longer for longer text, pause on hover, and open Full Chat when clicked.
 - Each character has its own persona, affinity and conversation. Model and voice service settings are shared. Existing settings migrate to the currently selected character.
@@ -162,6 +162,16 @@ Voice is off by default. Supported voice backends:
 - Custom voice API: for cloud voice services or your own wrapper. The app sends a JSON template where `{{text}}` is replaced with the text to speak.
 
 `Test Voice` sends a real request with the current voice configuration. GPT-SoVITS and custom APIs should return an audio stream, or JSON containing an audio URL, base64 audio, or a data URL.
+
+### Shared Memories And Touch
+
+In **Settings > Memories**, write the details you want the current character to refer to, one per line. The list holds up to 20 notes of 240 characters each. Enable **Use these memories in conversations** and save. This is off by default; the app does not extract memories from chats or make extra model requests to build the list.
+
+You can edit or remove any line, or clear the list, then save. Each character has a separate list, independent of saved chat history. Turning memories off stops attaching the list to new model requests but keeps the notes on this device. Deleting notes does not remove references already present in chat history or data already sent to a provider. Clear chat history separately when needed. Notes are stored as local text, not in a password vault; enabled notes are sent to your configured model with each conversation request. Recall depends on the model and is not guaranteed.
+
+In automatic expression mode, a head touch or long press, a body tap, and putting the character down after dragging give different local responses using the pack's existing expressions. Built-in characters have distinct short lines, with your preferred name when set. These interactions do not contact a model, play TTS, or increase affection. Short lines do not replace visible replies or reminders, and touches do not interrupt a conversation or voice playback. Turn off **General > Touch responses** for the previous gesture-only behavior.
+
+Click-to-change mode stays manual: one click advances one expression, double-clicks and long presses do not add changes, and dragging restores the expression you selected before the move. Character graphics are unchanged; this is not Live2D.
 
 ## Character Packs
 

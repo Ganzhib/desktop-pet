@@ -74,6 +74,9 @@ const saveSettingsButton = document.querySelector("#save-settings");
 const clearKeyButton = document.querySelector("#clear-key");
 const backToChatButton = document.querySelector("#back-to-chat");
 const rememberHistoryEl = document.querySelector("#remember-history");
+const memoryEnabledEl = document.querySelector("#memory-enabled");
+const memoryNotesEl = document.querySelector("#memory-notes");
+const interactionResponsesEl = document.querySelector("#interaction-responses");
 const streamRepliesEl = document.querySelector("#stream-replies");
 const validation = window.DesktopPetValidation;
 let selectedTab = "character";
@@ -85,6 +88,7 @@ let testGeneration = 0;
 const characterDrafts = new Map();
 
 function selectTab(name) {
+  const changed = selectedTab !== name;
   selectedTab = name;
   for (const page of document.querySelectorAll("[data-page]")) page.hidden = page.dataset.page !== name;
   for (const tab of document.querySelectorAll("[data-tab]")) {
@@ -94,6 +98,7 @@ function selectTab(name) {
     tab.tabIndex = selected ? 0 : -1;
   }
   document.querySelector("#affection-panel").hidden = name !== "character";
+  if (changed) document.querySelector(".settings-content").scrollTop = 0;
 }
 
 function validateForm(scope = "all") {
@@ -102,7 +107,7 @@ function validateForm(scope = "all") {
   const invalid = validation.validate(readConfigForm(), scope);
   if (!invalid) return true;
   const element = document.querySelector(`#${invalid.field}`);
-  selectTab(invalid.field.startsWith("tts-") ? "voice" : "chat");
+  selectTab(invalid.field === "memory-notes" ? "memory" : invalid.field.startsWith("tts-") ? "voice" : "chat");
   const error = document.createElement("span");
   error.className = "field-error";
   error.id = `${invalid.field}-error`;
@@ -254,6 +259,7 @@ function restoreDraft(draft, characterId) {
     renderCharacterCards();
   }
   renderRelationshipField();
+  renderMemoryCount();
   updateRangeLabels();
   updateProviderVisibility();
 }
@@ -289,6 +295,7 @@ function applyStaticTranslations() {
   personaSpeakingStyleEl.placeholder = text("settings.persona.speakingStylePlaceholder");
   personaBackgroundEl.placeholder = text("settings.persona.backgroundPlaceholder");
   personaExtraRulesEl.placeholder = text("settings.persona.extraRulesPlaceholder");
+  memoryNotesEl.placeholder = text("settings.memory.placeholder");
   modelEl.placeholder = text("settings.llm.modelPlaceholder");
   apiKeyEl.placeholder = text("settings.llm.apiKeyPlaceholder");
   ttsApiKeyEl.placeholder = text("settings.llm.apiKeyPlaceholder");
@@ -307,7 +314,26 @@ function applyStaticTranslations() {
   saveSettingsButton.textContent = text("settings.save");
   saveStatusEl.textContent = text("settings.saveLocal");
   updateRangeLabels();
+  renderMemoryCount();
 }
+
+function memoryNotesFromForm() {
+  return memoryNotesEl.value.split(/\r?\n/).map((note) => note.trim()).filter(Boolean);
+}
+
+function renderMemoryCount() {
+  const count = memoryNotesFromForm().length;
+  document.querySelector("#memory-count").textContent = text("settings.memory.count", { count });
+  document.querySelector("#clear-memories").disabled = count === 0;
+}
+
+memoryNotesEl.addEventListener("input", renderMemoryCount);
+document.querySelector("#clear-memories").addEventListener("click", () => {
+  memoryNotesEl.value = "";
+  renderMemoryCount();
+  saveStatusEl.textContent = text("settings.memory.clearPending");
+  memoryNotesEl.focus();
+});
 
 function localizedDefaultValue(value, zhDefault, translationKey) {
   if (!value || value === zhDefault) return text(translationKey);
@@ -460,6 +486,12 @@ function renderConfig(preserveDraft = false) {
   refreshLanguageOptions(config.language || "system");
   applyStaticTranslations();
   renderCharacterCards();
+
+  memoryEnabledEl.checked = config.memory?.enabled === true;
+  memoryNotesEl.value = (config.memory?.notes || []).join("\n");
+  interactionResponsesEl.checked = config.interactionResponses !== false;
+  document.querySelector("#memory-character").textContent = persona.name
+    || characters.find((item) => item.id === selectedCharacterId)?.name || "Desktop Pet";
 
   personaNameEl.value = persona.name || "";
   personaUserNameEl.value = persona.userName || "";
@@ -630,6 +662,8 @@ function readConfigForm(includeEmptyKey = false) {
   };
 
   return { language: languageEl.value, characterId: selectedCharacterId, assistant, tts, persona, affection, profile,
+    memory: { enabled: memoryEnabledEl.checked, notes: memoryNotesFromForm() },
+    interactionResponses: interactionResponsesEl.checked,
     rememberHistory: rememberHistoryEl.checked };
 }
 

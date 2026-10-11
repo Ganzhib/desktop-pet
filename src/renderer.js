@@ -41,6 +41,8 @@ let settings = {
   language: "system",
   resolvedLanguage: "zh-CN",
   expressionMode: "automatic",
+  interactionResponses: true,
+  userName: "",
   scale: 1,
   alwaysOnTop: true,
   tts: { enabled: false, provider: "none", voiceName: "", rate: 1, pitch: 1 },
@@ -72,6 +74,8 @@ let conversationActive = false;
 let conversationAction = "idle";
 let queuedNotice = null;
 let bubbleVisible = false;
+let interactionReadyAt = 0;
+let interactionVariants = { head: 0, greet: 0, drop: 0 };
 
 function text(key, variables = {}) {
   return i18n.t(key, variables, activeLanguage);
@@ -210,6 +214,8 @@ function applyAppState(nextAppState = {}) {
     resolvedLanguage: nextAppState.resolvedLanguage || nextAppState.settings?.resolvedLanguage || "zh-CN",
     characterId: nextAppState.settings?.characterId || character.id,
     expressionMode: nextAppState.settings?.expressionMode === "clickOnly" ? "clickOnly" : "automatic",
+    interactionResponses: nextAppState.settings?.interactionResponses !== false,
+    userName: nextAppState.settings?.persona?.userName || "",
     scale: Number(nextAppState.settings?.scale) || 1,
     alwaysOnTop: nextAppState.settings?.alwaysOnTop !== false,
     tts: {
@@ -224,7 +230,11 @@ function applyAppState(nextAppState = {}) {
       pitch: Number(nextAppState.settings?.tts?.pitch) || 1,
     },
   };
-  if (characterChanged) clearPresentation();
+  if (characterChanged) {
+    interactionReadyAt = 0;
+    interactionVariants = { head: 0, greet: 0, drop: 0 };
+    clearPresentation();
+  }
   else if (previousTts !== JSON.stringify(settings.tts)) {
     stopSpeech();
     if (bubbleVisible) hideBubbleLater(Math.max(3000, bubbleRemaining));
@@ -258,6 +268,10 @@ function applyAppState(nextAppState = {}) {
 }
 
 function resetAfterSettingsChange() {
+  window.clearTimeout(clickTimer);
+  ignoreSingleClicksUntil = 0;
+  clickOnlyReadyAt = 0;
+  cancelDrag();
   temporaryToken += 1;
   state = "idle";
   frameIndex = 0;
@@ -274,12 +288,30 @@ function resetAfterSettingsChange() {
   scheduleStartupGreeting();
 }
 
-function handleClick() {
+function respondToInteraction(kind) {
+  if (settings.expressionMode !== "automatic" || !settings.interactionResponses
+    || conversationActive || speechActive) return;
+  const choices = kind === "head" ? ["shy", "happy", "review", "idle"]
+    : kind === "drop" ? ["tsundereProud", "happy", "waving", "idle"] : ["waving", "happy", "idle"];
+  const action = choices.find((name) => character.states[name]);
+  if (action) playTemporary(action, 1400);
+  // Touches stay local and quiet; they neither replace a visible reply nor queue up.
+  if (bubbleVisible || performance.now() < interactionReadyAt) return;
+  interactionReadyAt = performance.now() + 6000;
+  const style = character.id === "luna" ? "luna" : "default";
+  const variant = interactionVariants[kind]++ % 2;
+  const line = text(`pet.interaction.${style}.${kind}.${variant}`);
+  showBubble(settings.userName ? text("pet.interaction.address", { name: settings.userName, line }) : line);
+}
+
+function handleClick(kind = "greet") {
   window.desktopPet.recordInteraction("click");
   if (settings.expressionMode === "clickOnly") {
     const [nextState, nextFrame] = nextStaticExpression();
     setStaticExpression(nextState, nextFrame);
   } else {
+    if (conversationActive || speechActive) return;
+    if (settings.interactionResponses) { respondToInteraction(kind); return; }
     const nextState = nextClickState();
     playTemporary(nextState);
   }
@@ -287,28 +319,29 @@ function handleClick() {
 
 function handleDoubleClick() {
   window.clearTimeout(clickTimer);
+  if (settings.expressionMode === "clickOnly" || conversationActive || speechActive) return;
   ignoreSingleClicksUntil = performance.now() + 360;
-  if (settings.expressionMode === "clickOnly") return;
   window.desktopPet.recordInteraction("doubleClick");
   playTemporary("jumping", 1200);
 }
 
 function handleLongPress() {
   window.clearTimeout(clickTimer);
+  if (settings.expressionMode === "clickOnly" || conversationActive || speechActive) return;
   window.desktopPet.recordInteraction("longPress");
-  if (settings.expressionMode === "clickOnly") {
-    setStaticExpression("review", 1);
+  if (settings.interactionResponses) {
+    respondToInteraction("head");
   } else {
     playTemporary("review", 1400);
   }
 }
 
-function scheduleSingleClick() {
+function scheduleSingleClick(kind) {
   window.clearTimeout(clickTimer);
   const scheduledAt = performance.now();
   clickTimer = window.setTimeout(() => {
     if (scheduledAt < ignoreSingleClicksUntil) return;
-    handleClick();
+    handleClick(kind);
   }, SINGLE_CLICK_DELAY);
 }
 
@@ -321,10 +354,14 @@ function handleClickOnlyPointerClick() {
 
 function beginDrag(event) {
   if (event.button !== 0) return;
+  window.clearTimeout(clickTimer);
+  const bounds = canvas.getBoundingClientRect();
   dragStart = {
     x: event.screenX,
     y: event.screenY,
     time: performance.now(),
+    kind: (event.clientY - bounds.top) / bounds.height < 0.46 ? "head" : "greet",
+    expression: { state, frame: frameIndex },
   };
   didDrag = false;
   canvas.classList.add("dragging");
@@ -358,15 +395,17 @@ function endDrag(event) {
   canvas.classList.remove("dragging");
 
   const heldDuration = performance.now() - dragStart.time;
+  const { kind, expression } = dragStart;
   dragStart = null;
 
   if (didDrag) {
     didDrag = false;
     if (settings.expressionMode === "clickOnly") {
-      setStaticExpression("idle", 0);
+      setStaticExpression(expression?.state || "idle", expression?.frame || 0);
     } else {
       setState(conversationActive ? conversationAction : "idle");
       scheduleIdleBehavior();
+      respondToInteraction("drop");
     }
     return;
   }
@@ -381,7 +420,7 @@ function endDrag(event) {
     return;
   }
   if (event.detail > 1) return;
-  scheduleSingleClick();
+  scheduleSingleClick(kind);
 }
 
 let bubbleDeadline = 0;
@@ -583,12 +622,14 @@ canvas.addEventListener("pointerenter", () => {
 window.addEventListener("pointerup", endDrag);
 function cancelDrag() {
   if (!dragStart) return;
+  const expression = dragStart.expression;
   dragStart = null;
   didDrag = false;
   window.clearInterval(dragInterval);
   window.desktopPet.dragEnd();
   canvas.classList.remove("dragging");
   if (settings.expressionMode === "automatic") setState(conversationActive ? conversationAction : "idle");
+  else if (expression) setStaticExpression(expression.state, expression.frame);
 }
 window.addEventListener("blur", cancelDrag);
 window.addEventListener("pointercancel", cancelDrag);

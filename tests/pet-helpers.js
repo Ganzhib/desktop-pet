@@ -16,6 +16,7 @@ function loadPet(api = {}) {
   const talk = { textContent: "", addEventListener() {} };
   const canvas = {
     width: 768, height: 832, classList: { add() {}, remove() {} },
+    getBoundingClientRect: () => ({ top: 0, left: 0, width: 192, height: 208 }),
     addEventListener(name, handler) { events[name] = handler; },
     getContext: () => ({ clearRect() {}, drawImage: (image) => draws.push(image.src) }),
   };
