@@ -10,12 +10,12 @@ const screenshots = path.join(__dirname, "../out/smoke");
 app.setPath("userData", dataDir);
 app.disableHardwareAcceleration();
 
-const wav = Buffer.alloc(44 + 800);
+const wav = Buffer.alloc(44 + 96000);
 wav.write("RIFF"); wav.writeUInt32LE(wav.length - 8, 4); wav.write("WAVEfmt ", 8);
 wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22);
 wav.writeUInt32LE(8000, 24); wav.writeUInt32LE(16000, 28);
 wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34);
-wav.write("data", 36); wav.writeUInt32LE(800, 40);
+wav.write("data", 36); wav.writeUInt32LE(wav.length - 44, 40);
 const requests = [];
 let delayedResponse;
 let streamResponse;
@@ -90,6 +90,8 @@ async function run() {
     const pet = await findWindow("index.html");
     const state = await evaluate(pet, () => window.desktopPet.getAppState());
     assert.equal(state.settings.persona.name, "Test Character");
+    assert.equal(state.settings.persona.userName, "Alex");
+    assert.equal(state.settings.persona.relationship, "partner");
     assert.equal(state.settings.language, "en-US");
     assert.equal(state.settings.scale, 1.5);
     assert.equal(state.settings.characterId, "default");
@@ -145,6 +147,9 @@ async function run() {
   }), "nonblank character canvas");
   await evaluate(settings, (url) => {
     document.querySelector("#persona-name").value = "Test Character";
+    document.querySelector("#persona-user-name").value = "Alex";
+    document.querySelector("#persona-relationship").value = "partner";
+    document.querySelector("#persona-relationship").dispatchEvent(new Event("change"));
     document.querySelector("#base-url").value = `${url}/v1`;
     document.querySelector("#model").value = "test-model";
     document.querySelector("#api-key").value = "unsaved-test-key";
@@ -180,6 +185,8 @@ async function run() {
     await until(() => evaluate(chat, () => !document.querySelector("#send-message").disabled), "chat reply");
   }
   await send("First message");
+  assert.match(requests.at(-1).messages[0].content, /Alex/);
+  assert.match(requests.at(-1).messages[0].content, /fictional romantic companionship/);
   await send("Second message");
   assert.ok(requests.at(-1).messages.some((message) => message.role === "assistant" && message.content === "Test reply received."));
   await send("Failure message");
@@ -220,6 +227,10 @@ async function run() {
   });
   await until(() => evaluate(chat, () => document.querySelector("#messages").textContent.includes("First paragraph")), "incremental reply before completion");
   assert.equal(await evaluate(pet, () => state), "waving");
+  await delay(1800);
+  assert.equal(await evaluate(pet, () => state), "waving");
+  await evaluate(pet, () => handlePetMessage({ text: "Deferred reminder", action: "review", speak: false }));
+  assert.equal(await evaluate(pet, () => document.querySelector("#speech-bubble").textContent), "First paragraph");
   assert.equal(await evaluate(pet, () => document.querySelector("#speech-bubble").textContent.includes("[expression:")), false);
   assert.equal(await evaluate(chat, () => document.querySelector("#stop-message").hidden), false);
   const longReply = "Long reply ".repeat(220);
@@ -255,6 +266,7 @@ async function run() {
   await evaluate(pet, () => window.desktopPet.setSettings({ characterId: "luna", expressionMode: "clickOnly" }));
   await until(() => evaluate(pet, () => character.id === "luna" && spriteImage && state === "idle"), "Luna loaded");
   assert.equal((await evaluate(chat, () => window.desktopPet.getChatState())).config.persona.name, "");
+  assert.equal((await evaluate(chat, () => window.desktopPet.getChatState())).config.persona.userName, "");
   assert.equal((await evaluate(chat, () => window.desktopPet.getChatState())).history.length, 0);
   const initialFrame = await evaluate(pet, () => document.querySelector("canvas").toDataURL());
   await evaluate(pet, () => {
@@ -270,6 +282,16 @@ async function run() {
   await until(() => evaluate(pet, () => character.id === "default" && spriteImage?.src.includes("/default/")), "default character restored");
 
   await evaluate(settings, (url) => window.desktopPet.saveChatConfig({ tts: { provider: "custom", enabled: true, endpoint: `${url}/tts`, customBodyTemplate: '{"text":"{{text}}"}' } }), endpoint);
+  await evaluate(pet, () => {
+    document.querySelector("#speech-bubble").dispatchEvent(new MouseEvent("mouseleave"));
+    handlePetMessage({ source: "chat", text: "Spoken reply", action: "review" });
+  });
+  await until(() => evaluate(pet, () => speechActive && activeAudio && !activeAudio.paused), "reply voice starts");
+  await delay(4700);
+  assert.equal(await evaluate(pet, () => speechActive && bubbleVisible && state === "review"), true);
+  await until(() => evaluate(pet, () => !speechActive), "reply voice finishes");
+  assert.equal(await evaluate(pet, () => bubbleVisible), true);
+  await evaluate(pet, () => handlePetMessage({ clear: true }));
   const voice = await evaluate(pet, () => window.desktopPet.synthesizeSpeech("Voice test"));
   assert.equal(voice.ok, true);
   assert.ok(voice.audioDataUrl.startsWith("data:audio/wav;base64,"));
@@ -332,11 +354,20 @@ async function run() {
     assert.equal(await evaluate(settings, () => document.querySelector("#save-settings").getBoundingClientRect().bottom <= window.innerHeight), true);
     await screenshot(settings, `settings-${tab}`);
   }
+  await evaluate(settings, () => {
+    document.querySelector("#tab-character").click();
+    document.querySelector("#persona-relationship").value = "custom";
+    document.querySelector("#persona-relationship").dispatchEvent(new Event("change"));
+    document.querySelector("#persona-custom-relationship").value = "Childhood friends";
+    document.querySelector("#persona-relationship").scrollIntoView({ block: "center" });
+  });
+  assert.equal(await evaluate(settings, () => !document.querySelector("#custom-relationship-row").hidden), true);
+  await screenshot(settings, "settings-relationship");
   await screenshot(quick, "quick-input");
   for (const window of [pet, settings, chat, quick]) {
     assert.deepEqual(await evaluate(window, () => window.smokeErrors), []);
   }
-  console.log("Electron smoke PASS: startup, canvas, resizing, drafts, validation, settings tabs, streaming, stop, long replies, bubble hover, context isolation, languages, click-only, voice GET/playback errors, import/preview/remove and optional history.");
+  console.log("Electron smoke PASS: startup, canvas, resizing, drafts, validation, settings tabs, streaming, stop, long replies, bubble hover, relationship settings, conversation holds, deferred reminders, context isolation, languages, click-only, voice lifecycle/GET/playback errors, import/preview/remove and optional history.");
 }
 
 const watchdog = setTimeout(() => { console.error("Electron smoke timed out"); app.exit(1); }, 120000);

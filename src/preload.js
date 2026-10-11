@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld("desktopPet", {
   confirmCharacterImport: (token) => ipcRenderer.invoke("confirm-character-import", token),
   removeCharacterImport: (id) => ipcRenderer.invoke("remove-character-import", id),
   voicePlaybackError: () => ipcRenderer.send("voice-playback-error"),
+  presentNotification: (notice) => ipcRenderer.send("present-notification", notice),
   synthesizeSpeech: (text) => ipcRenderer.invoke("synthesize-speech", text),
   openChatWindow: () => ipcRenderer.send("open-chat-window"),
   openQuickChatWindow: () => ipcRenderer.send("open-quick-chat-window"),

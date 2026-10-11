@@ -6,6 +6,7 @@ const i18n = require("../src/i18n");
 function loadPet(api = {}) {
   const intervals = new Map();
   const timeouts = new Map();
+  const durations = new Map();
   const images = [];
   const draws = [];
   const audio = [];
@@ -34,7 +35,7 @@ function loadPet(api = {}) {
     addEventListener(name, handler) { events[name] = handler; },
     setInterval(fn) { intervals.set(++timerId, fn); return timerId; },
     clearInterval(id) { intervals.delete(id); },
-    setTimeout(fn) { timeouts.set(++timerId, fn); return timerId; },
+    setTimeout(fn, duration) { timeouts.set(++timerId, fn); durations.set(timerId, duration); return timerId; },
     clearTimeout(id) { timeouts.delete(id); },
   };
   const context = vm.createContext({
@@ -43,7 +44,8 @@ function loadPet(api = {}) {
       documentElement: { style: { setProperty() {} } } },
   });
   vm.runInContext(fs.readFileSync(path.join(__dirname, "../src/renderer.js"), "utf8"), context);
-  return { context, intervals, timeouts, images, draws, audio, bubble, events,
+  return { context, intervals, timeouts, durations, images, draws, audio, bubble, events,
+    fireTimer(id) { const fn = timeouts.get(id); timeouts.delete(id); fn?.(); },
     run: (code) => vm.runInContext(code, context) };
 }
 

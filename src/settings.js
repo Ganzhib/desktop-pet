@@ -7,6 +7,14 @@ const llmStatusEl = document.querySelector("#llm-status");
 const ttsStatusEl = document.querySelector("#tts-status");
 const affectionStatusEl = document.querySelector("#affection-status");
 const personaNameEl = document.querySelector("#persona-name");
+const personaUserNameEl = document.querySelector("#persona-user-name");
+const personaRelationshipEl = document.querySelector("#persona-relationship");
+const personaCustomRelationshipEl = document.querySelector("#persona-custom-relationship");
+
+function renderRelationshipField() {
+  document.querySelector("#custom-relationship-row").hidden = personaRelationshipEl.value !== "custom";
+}
+personaRelationshipEl.addEventListener("change", renderRelationshipField);
 const personaPersonalityEl = document.querySelector("#persona-personality");
 const personaSpeakingStyleEl = document.querySelector("#persona-speaking-style");
 const personaBackgroundEl = document.querySelector("#persona-background");
@@ -174,6 +182,9 @@ let config = {
   persona: {
     setupDone: false,
     name: "",
+    userName: "",
+    relationship: "default",
+    customRelationship: "",
     personality: "",
     speakingStyle: "",
     background: "",
@@ -242,6 +253,7 @@ function restoreDraft(draft, characterId) {
     selectedCharacterId = characterId;
     renderCharacterCards();
   }
+  renderRelationshipField();
   updateRangeLabels();
   updateProviderVisibility();
 }
@@ -272,6 +284,7 @@ function applyStaticTranslations() {
     element.textContent = text(element.dataset.i18n);
   }
   personaNameEl.placeholder = text("settings.persona.namePlaceholder");
+  personaUserNameEl.placeholder = text("settings.persona.userNamePlaceholder");
   personaPersonalityEl.placeholder = text("settings.persona.personalityPlaceholder");
   personaSpeakingStyleEl.placeholder = text("settings.persona.speakingStylePlaceholder");
   personaBackgroundEl.placeholder = text("settings.persona.backgroundPlaceholder");
@@ -449,6 +462,10 @@ function renderConfig(preserveDraft = false) {
   renderCharacterCards();
 
   personaNameEl.value = persona.name || "";
+  personaUserNameEl.value = persona.userName || "";
+  personaRelationshipEl.value = persona.relationship || "default";
+  personaCustomRelationshipEl.value = persona.customRelationship || "";
+  renderRelationshipField();
   personaPersonalityEl.value = persona.personality || "";
   personaSpeakingStyleEl.value = persona.speakingStyle || "";
   personaBackgroundEl.value = persona.background || "";
@@ -516,6 +533,8 @@ function renderConfig(preserveDraft = false) {
 
   const hasPersona = Boolean(
     persona.name
+    || persona.userName
+    || (persona.relationship && persona.relationship !== "default")
     || persona.personality
     || persona.speakingStyle
     || persona.background
@@ -586,6 +605,9 @@ function readConfigForm(includeEmptyKey = false) {
   const persona = {
     setupDone: true,
     name: personaNameEl.value.trim(),
+    userName: personaUserNameEl.value.trim(),
+    relationship: personaRelationshipEl.value,
+    customRelationship: personaCustomRelationshipEl.value.trim(),
     personality: personaPersonalityEl.value.trim(),
     speakingStyle: personaSpeakingStyleEl.value.trim(),
     background: personaBackgroundEl.value.trim(),

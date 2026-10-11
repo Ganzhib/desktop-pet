@@ -63,6 +63,9 @@ const DEFAULT_SETTINGS = {
   persona: {
     setupDone: false,
     name: "",
+    userName: "",
+    relationship: "default",
+    customRelationship: "",
     personality: "",
     speakingStyle: "",
     background: "",
@@ -531,6 +534,9 @@ function normalizePersonaSettings(rawPersona = {}) {
   return {
     setupDone: raw.setupDone === true,
     name: normalizeCompactText(raw.name, 80),
+    userName: normalizeCompactText(raw.userName, 80),
+    relationship: ["default", "friend", "partner", "custom"].includes(raw.relationship) ? raw.relationship : "default",
+    customRelationship: normalizeLongText(raw.customRelationship, 600),
     personality: normalizeLongText(raw.personality, 1200),
     speakingStyle: normalizeLongText(raw.speakingStyle, 1200),
     background: normalizeLongText(raw.background, 1600),
@@ -958,9 +964,7 @@ function sendPetMessage(text, action = "waving", options = {}) {
 }
 
 function notify(title, body, action) {
-  sendPetMessage(body || title, action);
-  if (!Notification.isSupported()) return;
-  new Notification({ title, body, silent: true }).show();
+  sendPetMessage(body || title, action, { notification: { title, body } });
 }
 
 function publicChatConfig() {
@@ -1150,6 +1154,10 @@ function personaInstruction() {
   return [
     t("prompt.role", { name: characterName }),
     personaLines.length ? personaLines.join("\n") : t("prompt.characterStyle", { style: activeCharacterStyle() }),
+    persona.userName ? t("prompt.userName", { name: persona.userName }) : "",
+    persona.relationship === "custom"
+      ? (persona.customRelationship ? t("prompt.relationshipCustom", { text: persona.customRelationship }) : "")
+      : (persona.relationship !== "default" ? t(`prompt.relationship.${persona.relationship}`) : ""),
     settings.affection?.enabled ? affectionInstruction() : "",
     expressionInstruction(getCharacterPack()?.states || { idle: {} }),
     t("prompt.defaultLanguage"),
@@ -1206,23 +1214,6 @@ function llmMessagesFor(userText) {
 function pickAvailableAction(candidates, fallback = "waving") {
   const states = getCharacterPack()?.states || {};
   return candidates.find((stateName) => states[stateName]) || (states[fallback] ? fallback : "idle");
-}
-
-function inferPetAction(userText, replyText) {
-  const text = `${userText} ${replyText}`;
-  if (/谢谢|感谢|开心|哈哈|喜欢|太好|可爱|棒|好耶|nice|thanks|thank you|happy|cute|great|ありがとう|嬉しい|かわいい|すごい/i.test(text)) {
-    return pickAvailableAction(["happy", "waving", "jumping"]);
-  }
-  if (/害羞|脸红|不好意思|嘴硬|傲娇|哼|才不是|shy|blush|tsundere|hmph|照れ|恥ずかしい|ツンデレ|ふん/i.test(text)) {
-    return pickAvailableAction(["tsundereEmbarrassed", "shy", "happy", "waving"]);
-  }
-  if (/生气|烦|不满|讨厌|笨|错了|失败|坏了|报错|angry|annoyed|error|failed|broken|bug|怒|失敗|エラー|壊れ/i.test(text)) {
-    return pickAvailableAction(["tsundereAnnoyed", "failed", "review"]);
-  }
-  if (/想一想|为什么|怎么|如何|问题|代码|修|做|分析|解释|why|how|question|code|fix|analyze|explain|なぜ|どう|質問|コード|修正|説明|\?|\？/i.test(text)) {
-    return pickAvailableAction(["review", "tsundereProud", "waving"]);
-  }
-  return pickAvailableAction(["tsundereProud", "waving", "idle"]);
 }
 
 function bubblePreview(text) {
@@ -1286,7 +1277,8 @@ async function requestAssistantReply(userText, controller = new AbortController(
 
     return {
       reply,
-      action: parsed.action || inferPetAction(userText, reply),
+      // Missing metadata is not evidence of an emotion, especially with negation.
+      action: parsed.action || "idle",
       ok: true,
     };
   } catch (error) {
@@ -1401,7 +1393,7 @@ async function sendChatMessage(_event, rawText) {
   voiceError = false;
   broadcastChatState();
 
-  sendPetMessage(t("pet.thinking"), pickAvailableAction(["review", "tsundereProud", "waving"]), { speak: false, streaming: true });
+  sendPetMessage(t("pet.thinking"), pickAvailableAction(["review", "idle"]), { source: "chat", speak: false, streaming: true });
   try {
     const result = await requestAssistantReply(text, request.controller, (reply, action) => {
       if (chatRequest !== request) return;
@@ -1410,7 +1402,7 @@ async function sendChatMessage(_event, rawText) {
       if (!request.lastProgress || now - request.lastProgress >= 60) {
         request.lastProgress = now;
         broadcastChatState();
-        sendPetMessage(bubblePreview(reply), action && action !== request.action ? action : "", { speak: false, streaming: true });
+        sendPetMessage(bubblePreview(reply), action && action !== request.action ? action : "", { source: "chat", speak: false, streaming: true });
         if (action) request.action = action;
       }
     });
@@ -1420,6 +1412,7 @@ async function sendChatMessage(_event, rawText) {
     addChatMessage("user", text, !result.ok);
     const assistantMessage = addChatMessage("assistant", result.reply, !result.ok);
     sendPetMessage(result.reply, result.action, {
+      source: "chat",
       speak: result.ok,
       bubbleText: bubblePreview(result.reply),
     });
@@ -1828,6 +1821,12 @@ app.whenReady().then(() => {
   ipcMain.handle("synthesize-speech", synthesizeSpeech);
   ipcMain.on("set-settings", (_event, patch) => updateSettings(patch));
   ipcMain.on("record-interaction", (_event, kind) => updateMoodFromInteraction(kind));
+  ipcMain.on("present-notification", (event, notice) => {
+    if (event.sender !== mainWindow?.webContents || !Notification.isSupported()) return;
+    const title = normalizeCompactText(notice?.title, 120);
+    const body = normalizeLongText(notice?.body, 600);
+    if (title || body) new Notification({ title, body, silent: true }).show();
+  });
   ipcMain.on("open-chat-window", createChatWindow);
   ipcMain.on("open-quick-chat-window", createQuickChatWindow);
   ipcMain.on("open-companion-settings", createCompanionSettingsWindow);

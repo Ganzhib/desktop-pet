@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
 
-**0.1.1 维护更新：**修复聊天发送、设置草稿和更换接口时的密钥处理，并更新打包依赖。建议从 0.1.0 更新。[更新说明](docs/releases/v0.1.1.md)。
+**0.2.0 陪伴更新：**角色旁对话、专属称呼与关系设定、表情和语音同步、更多模型预设，以及角色包导入。[更新说明](docs/releases/v0.2.0.md)。
 
 [![Build](https://github.com/TonyNa-code/desktop-pet/actions/workflows/build.yml/badge.svg)](https://github.com/TonyNa-code/desktop-pet/actions/workflows/build.yml)
 [![Latest Release](https://img.shields.io/github/v/release/TonyNa-code/desktop-pet?label=latest%20release)](https://github.com/TonyNa-code/desktop-pet/releases/latest)
@@ -119,11 +119,13 @@ npm run build
 
 - 预设：`Ollama`、`LM Studio`、`DeepSeek`、`自定义接口` 会填入常见 Base URL 和模型名起点。
 - DeepSeek 预设：使用 `https://api.deepseek.com` 和 `deepseek-flash`；其它模型名可参考 [DeepSeek 官方文档](https://api-docs.deepseek.com/)。
-- 当前源码另有 OpenAI、Google Gemini、通义千问（北京）、SiliconFlow、OpenRouter、Groq 预设，并保留 Ollama、LM Studio 和自定义接口。每个服务使用各自的密钥，DeepSeek 密钥不能用于其它平台。
+- 另有 OpenAI、Google Gemini、通义千问（北京）、SiliconFlow、OpenRouter、Groq 预设，并保留 Ollama、LM Studio 和自定义接口。每个服务使用各自的密钥，DeepSeek 密钥不能用于其它平台。
 - “获取模型列表”只查询模型，不发送聊天内容。请选择支持文字对话的模型；服务不提供列表时仍可手动填入。模型不接受温度参数时可关闭“发送温度参数”。
 - 兼容范围为 OpenAI Chat Completions，不包含原生 Anthropic Messages、Gemini GenerateContent 或 OpenAI Responses。Claude 可通过 OpenRouter 等兼容服务接入，不能直接填入 Anthropic 密钥。千问地址必须与密钥所属地域一致，参见[官方地域说明](https://help.aliyun.com/zh/model-studio/compatibility-of-openai-with-dashscope)。预设不代表所有模型都经过实测。
 
-当前源码中的角色旁“对话”按钮会打开跟随角色移动的简约输入框，并显示角色称呼。完整回复显示在气泡中，可滚动阅读；记录和设置仍可单独打开。模型可从角色已有动作中选择表情，“点击换表情”模式仍然只由点击控制。这些改动尚未包含在 0.1.1 下载包中。
+角色旁“对话”按钮会打开跟随角色移动的简约输入框，并显示角色称呼。完整回复显示在气泡中，可滚动阅读；记录和设置仍可单独打开。模型可从角色已有动作中选择表情，“点击换表情”模式仍然只由点击控制。
+
+在角色页填写“她怎么称呼你”，再选择朋友、恋人或自定义关系，也可以沿用原有人设。每个角色分别保存，不需要开启好感度。称呼和关系保存在本机，聊天时会随人设发送到你配置的模型服务；实际口吻取决于所选模型。
 - `Base URL`：兼容常见 `/chat/completions` 格式的接口地址，例如本地模型服务 `http://localhost:11434/v1`，或云端模型平台提供的兼容地址
 - `模型名`：接口支持的模型名，本地和云端都需要填写
 - `API key`：需要鉴权的接口才填写，本地模型通常可以留空
@@ -132,10 +134,13 @@ npm run build
 
 API key 只保存在本机。应用会优先用系统安全存储加密；如果当前系统不支持安全持久化，key 只在本次运行中保留。聊天记录默认只在本次运行中保留；每个角色可以单独开启本地保存，保留最近 80 条消息。关闭保存会删除该角色的已存记录。聊天记录不会写入仓库。
 
-### 下一版本功能
+### 陪伴功能
 
-以下功能已加入当前源码，尚未包含在 0.1.1 下载包中：
+以下功能包含在 0.2.0 中：
 
+- 对话动作播放一遍后保持表情，待机和鼠标悬停不再打断回复；语音生成和播放时气泡不会自动消失，播放失败也保留原回复文字。
+- 模型未提供有效表情时保持自然待机，不再因“不开心”含有“开心”而切换到高兴表情。
+- 休息和专注提醒会等待对话气泡结束。只保留最新的一条待显示提醒，超过一分钟的旧提醒不再补发。
 - 设置分为通用、角色、聊天和语音，底部固定保存按钮；退出前提示未保存的修改。
 - 支持流式回复、停止生成与失败重试。快速输入也能停止生成；服务不支持流式时，可在聊天设置中关闭。
 - 长回复保留完整段落；气泡根据长度延时，悬停暂停，点击打开完整聊天。

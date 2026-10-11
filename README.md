@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
 
-**0.1.1 maintenance update:** fixes chat sending, settings drafts, and API key handling when changing services, and updates packaging dependencies. Updating from 0.1.0 is recommended. [Release notes](docs/releases/v0.1.1.md).
+**0.2.0 companion update:** character-side chat, preferred names and relationships, coordinated expressions and voice, more model presets, and character import. [Release notes](docs/releases/v0.2.0.md).
 
 [![Build](https://github.com/TonyNa-code/desktop-pet/actions/workflows/build.yml/badge.svg)](https://github.com/TonyNa-code/desktop-pet/actions/workflows/build.yml)
 [![Latest Release](https://img.shields.io/github/v/release/TonyNa-code/desktop-pet?label=latest%20release)](https://github.com/TonyNa-code/desktop-pet/releases/latest)
@@ -119,11 +119,13 @@ Right-click the pet and choose `Chat > Quick Input` for a minimal companion-styl
 
 The settings window opens automatically on first launch. `Persona` controls the character name, personality, speaking style, background, and extra rules. If left empty, the app uses the current character pack's default style.
 
+Set `Your preferred name` and `Your relationship` in the Character tab to personalize how each character addresses you. Choose friends, romantic partners, a custom relationship, or keep the existing persona. These settings do not require enabling affection. Names and relationship details are stored locally with the character; when chatting, they are included in the persona sent to your configured model service. Reply style depends on the chosen model.
+
 `Affection` is off by default. When enabled, it only grows slowly with active chat time. Clicks, double-clicks, long presses, expression changes, and app launches do not increase it.
 
 Chat model fields:
 
-- Current-source presets: DeepSeek, OpenAI, Google Gemini, Qwen (Beijing), SiliconFlow, OpenRouter, Groq, Ollama, LM Studio, and Custom API. Each cloud service needs its own API key; a DeepSeek key cannot authenticate to another provider.
+- Service presets: DeepSeek, OpenAI, Google Gemini, Qwen (Beijing), SiliconFlow, OpenRouter, Groq, Ollama, LM Studio, and Custom API. Each cloud service needs its own API key; a DeepSeek key cannot authenticate to another provider.
 - DeepSeek preset: uses `https://api.deepseek.com` and `deepseek-flash`; see the [DeepSeek API documentation](https://api-docs.deepseek.com/) for other model names.
 - `Base URL`: a `/chat/completions` compatible endpoint, such as `http://localhost:11434/v1` for a local model service or a compatible cloud API URL
 - `Model Name`: the model name supported by the service; local and cloud services both need it
@@ -131,18 +133,20 @@ Chat model fields:
 
 `Test Chat Connection` sends a real request using the current form values and shows a short model response on success.
 
-In the current source, `Get models` retrieves a service's model list without sending a conversation. Choose a text chat model, or enter its exact name manually if the service does not offer a list. Turn off `Send temperature parameter` for models that reject that parameter. Compatibility means OpenAI **Chat Completions**, not native Anthropic Messages, Gemini GenerateContent, or OpenAI Responses. Claude models can be accessed through a compatible provider such as OpenRouter; this does not accept an Anthropic key directly.
+`Get models` retrieves a service's model list without sending a conversation. Choose a text chat model, or enter its exact name manually if the service does not offer a list. Turn off `Send temperature parameter` for models that reject that parameter. Compatibility means OpenAI **Chat Completions**, not native Anthropic Messages, Gemini GenerateContent, or OpenAI Responses. Claude models can be accessed through a compatible provider such as OpenRouter; this does not accept an Anthropic key directly.
 
 Provider references: [OpenAI](https://developers.openai.com/api/reference/chat-completions/overview), [Gemini compatibility](https://ai.google.dev/gemini-api/docs/openai), [Qwen regional endpoints](https://help.aliyun.com/zh/model-studio/compatibility-of-openai-with-dashscope), [SiliconFlow](https://docs.siliconflow.cn/docs/userguide/quickstart), [OpenRouter](https://openrouter.ai/docs/quickstart), [Groq](https://console.groq.com/docs/openai). Availability, billing, and model access depend on the chosen provider. Adding a preset does not mean every model has been tested.
 
 API keys are stored only on this device. The app uses system secure storage when available; if secure persistence is not available, keys are kept only for the current run. Chat history stays in memory by default. Each character can optionally keep its latest 80 messages on this device; turning that option off deletes its saved history. History is not written to the repository.
 
-### Upcoming Source Features
+### Companion Features
 
-These features are available in the current source, not the 0.1.1 downloads:
+Available in 0.2.0:
 
 - The pet's Talk button opens an input box beside the character. It follows the pet as it moves, shows the character's name, and links to history and settings. Replies remain in the pet bubble, including the full text of longer responses.
-- Replies can select an expression from the current character pack. Unrecognized expressions fall back to the existing reply reactions. Click-only expression mode remains manual.
+- Replies can select an expression from the current character pack. Missing or unrecognized expressions stay neutral rather than guessing from emotional keywords. Click-only expression mode remains manual.
+- Conversation gestures play once and hold while the reply is visible, with no idle or hover interruption. Bubbles stay visible during voice generation and playback. Voice errors leave the text reply intact.
+- Break and focus reminders wait until the current reply is dismissed. Only the latest queued notice is kept, and notices older than a minute are discarded.
 - Standard editing shortcuts and input-field context menus support pasting API keys and messages.
 - Settings are grouped into General, Character, Chat and Voice, with a fixed save bar and unsaved-change confirmation.
 - Replies can stream as they arrive. Stop or retry a reply in Full Chat; Quick Input also supports stopping. Disable `Stream replies` for a service that only supports non-streaming requests.

@@ -66,6 +66,23 @@
           <input id="persona-name" type="text" placeholder="例如 桌宠、角色名、小助手" spellcheck="false" />
         </label>
         <label>
+          <span data-i18n="settings.persona.userName">她怎么称呼你</span>
+          <input id="persona-user-name" type="text" maxlength="80" spellcheck="false" />
+        </label>
+        <label>
+          <span data-i18n="settings.persona.relationship">你们的关系</span>
+          <select id="persona-relationship">
+            <option value="default" data-i18n="settings.relationship.default">沿用人物设定</option>
+            <option value="friend" data-i18n="settings.relationship.friend">朋友</option>
+            <option value="partner" data-i18n="settings.relationship.partner">恋人</option>
+            <option value="custom" data-i18n="settings.relationship.custom">自定义</option>
+          </select>
+        </label>
+        <label id="custom-relationship-row" hidden>
+          <span data-i18n="settings.persona.customRelationship">关系设定</span>
+          <textarea id="persona-custom-relationship" rows="2" maxlength="600" spellcheck="false"></textarea>
+        </label>
+        <label>
           <span data-i18n="settings.persona.personality">性格</span>
           <textarea id="persona-personality" rows="3" placeholder="例如 礼貌、聪明、稍微傲娇，但内心关心使用者。" spellcheck="false"></textarea>
         </label>

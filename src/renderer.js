@@ -66,6 +66,12 @@ let activeLanguage = "zh-CN";
 let spriteLoadToken = 0;
 let speechToken = 0;
 let activeAudio = null;
+let speechActive = false;
+let speechWatchdog;
+let conversationActive = false;
+let conversationAction = "idle";
+let queuedNotice = null;
+let bubbleVisible = false;
 
 function text(key, variables = {}) {
   return i18n.t(key, variables, activeLanguage);
@@ -98,7 +104,10 @@ function startAnimation() {
       draw();
       return;
     }
-    frameIndex = (frameIndex + 1) % current.frames;
+    // Play a conversational gesture once, then hold its expression while speaking.
+    frameIndex = conversationActive && state === conversationAction
+      ? Math.min(frameIndex + 1, current.frames - 1)
+      : (frameIndex + 1) % current.frames;
     draw();
   }, current.interval);
   draw();
@@ -114,11 +123,11 @@ function setState(nextState) {
 
 function scheduleIdleBehavior() {
   window.clearTimeout(idleTimer);
-  if (settings.expressionMode !== "automatic") return;
+  if (settings.expressionMode !== "automatic" || conversationActive) return;
 
   const delay = 22000 + Math.random() * 15000;
   idleTimer = window.setTimeout(() => {
-    if (state === "idle") {
+    if (state === "idle" && !conversationActive) {
       const choices = character.automaticActions.length > 0
         ? character.automaticActions
         : FALLBACK_CHARACTER.automaticActions;
@@ -143,7 +152,7 @@ function playTemporary(nextState, duration = temporaryDuration(nextState)) {
   setState(nextState);
   window.setTimeout(() => {
     if (temporaryToken !== token || didDrag) return;
-    setState("idle");
+    setState(conversationActive ? conversationAction : "idle");
     scheduleIdleBehavior();
   }, duration);
 }
@@ -215,7 +224,11 @@ function applyAppState(nextAppState = {}) {
       pitch: Number(nextAppState.settings?.tts?.pitch) || 1,
     },
   };
-  if (characterChanged || previousTts !== JSON.stringify(settings.tts)) stopSpeech();
+  if (characterChanged) clearPresentation();
+  else if (previousTts !== JSON.stringify(settings.tts)) {
+    stopSpeech();
+    if (bubbleVisible) hideBubbleLater(Math.max(3000, bubbleRemaining));
+  }
   activeLanguage = settings.resolvedLanguage;
   talkButton.textContent = text("pet.talk");
   talkButton.title = text("quick.toCharacter", { name: character.name });
@@ -255,6 +268,7 @@ function resetAfterSettingsChange() {
     setStaticExpression("idle", 0);
   } else {
     startAnimation();
+    if (conversationActive && !dragStart) setState(conversationAction);
     scheduleIdleBehavior();
   }
   scheduleStartupGreeting();
@@ -351,7 +365,7 @@ function endDrag(event) {
     if (settings.expressionMode === "clickOnly") {
       setStaticExpression("idle", 0);
     } else {
-      setState("idle");
+      setState(conversationActive ? conversationAction : "idle");
       scheduleIdleBehavior();
     }
     return;
@@ -375,11 +389,33 @@ let bubbleRemaining = 0;
 let bubblePaused = false;
 let bubbleStreaming = false;
 
+function dismissBubble() {
+  window.clearTimeout(bubbleTimer);
+  speechBubble.classList.remove("visible");
+  bubbleVisible = false;
+  conversationActive = false;
+  conversationAction = "idle";
+  temporaryToken += 1;
+  if (settings.expressionMode === "automatic" && !dragStart) setState("idle");
+  scheduleIdleBehavior();
+  const pending = queuedNotice;
+  queuedNotice = null;
+  if (pending && pending.expiresAt > Date.now()) handlePetMessage(pending.message);
+}
+
+function clearPresentation() {
+  queuedNotice = null;
+  bubbleStreaming = false;
+  bubblePaused = false;
+  stopSpeech();
+  dismissBubble();
+}
+
 function hideBubbleLater(duration) {
   window.clearTimeout(bubbleTimer);
   bubbleRemaining = duration;
   bubbleDeadline = Date.now() + duration;
-  if (!bubblePaused && !bubbleStreaming) bubbleTimer = window.setTimeout(() => speechBubble.classList.remove("visible"), duration);
+  if (!bubblePaused && !bubbleStreaming && !speechActive) bubbleTimer = window.setTimeout(dismissBubble, duration);
 }
 
 function showBubble(text, duration = Math.min(22000, Math.max(4500, String(text || "").length * 110))) {
@@ -391,6 +427,7 @@ function showBubble(text, duration = Math.min(22000, Math.max(4500, String(text 
   if (follow) speechBubble.scrollTop = speechBubble.scrollHeight;
   else if (!continuing) speechBubble.scrollTop = 0;
   speechBubble.classList.add("visible");
+  bubbleVisible = true;
   speechBubble.title = window.DesktopPetI18n.t("pet.openChat", {}, activeLanguage);
   hideBubbleLater(duration);
 }
@@ -406,9 +443,11 @@ speechBubble.addEventListener("blur", () => { bubblePaused = false; hideBubbleLa
 speechBubble.addEventListener("click", () => window.desktopPet.openChatWindow());
 talkButton.addEventListener("click", () => window.desktopPet.openQuickChatWindow());
 
-function voicePlaybackFailed() {
-  window.desktopPet.voicePlaybackError();
-  showBubble(window.DesktopPetI18n.t("tts.playbackFailed", {}, activeLanguage));
+function finishSpeech(token, failed = false) {
+  if (token !== speechToken) return;
+  stopSpeech();
+  if (failed) window.desktopPet.voicePlaybackError();
+  if (bubbleVisible) hideBubbleLater(Math.max(3000, bubbleRemaining));
 }
 
 function chooseTtsVoice() {
@@ -428,6 +467,8 @@ function chooseTtsVoice() {
 
 function stopSpeech() {
   speechToken += 1;
+  speechActive = false;
+  window.clearTimeout(speechWatchdog);
   if (activeAudio) {
     activeAudio.pause();
     activeAudio.src = "";
@@ -440,50 +481,68 @@ async function speakText(text) {
   stopSpeech();
   const token = speechToken;
   if (!settings.tts?.enabled || !text) return;
+  speechActive = true;
+  window.clearTimeout(bubbleTimer);
+  speechWatchdog = window.setTimeout(() => finishSpeech(token, true), 300000);
   if (settings.tts.provider && !["none", "system"].includes(settings.tts.provider)) {
     try {
       const result = await window.desktopPet.synthesizeSpeech(text);
       if (token !== speechToken || !settings.tts.enabled) return;
-      if (!result?.ok || !result.audioDataUrl) { voicePlaybackFailed(); return; }
+      if (!result?.ok || !result.audioDataUrl) { finishSpeech(token, true); return; }
       activeAudio = new Audio(result.audioDataUrl);
-      activeAudio.onerror = () => { if (token === speechToken) voicePlaybackFailed(); };
+      activeAudio.onended = () => finishSpeech(token);
+      activeAudio.onerror = () => finishSpeech(token, true);
       await activeAudio.play();
     } catch {
-      if (token === speechToken) voicePlaybackFailed();
+      finishSpeech(token, true);
     }
     return;
   }
-  if (!("speechSynthesis" in window)) { voicePlaybackFailed(); return; }
+  if (!("speechSynthesis" in window)) { finishSpeech(token, true); return; }
   const utterance = new SpeechSynthesisUtterance(String(text).slice(0, 500));
   const voice = chooseTtsVoice();
   if (voice) utterance.voice = voice;
   utterance.rate = Math.min(Math.max(Number(settings.tts.rate) || 1, 0.5), 1.8);
   utterance.pitch = Math.min(Math.max(Number(settings.tts.pitch) || 1, 0.5), 1.8);
-  utterance.onerror = () => { if (token === speechToken) voicePlaybackFailed(); };
+  utterance.onend = () => finishSpeech(token);
+  utterance.onerror = () => finishSpeech(token, true);
   window.speechSynthesis.cancel();
   window.speechSynthesis.speak(utterance);
 }
 
 function handlePetMessage(message = {}) {
-  bubbleStreaming = message.streaming === true;
   if (message.clear) {
-    stopSpeech();
-    window.clearTimeout(bubbleTimer);
-    speechBubble.classList.remove("visible");
+    clearPresentation();
     return;
   }
+  const isChat = message.source === "chat";
+  if (!isChat && (conversationActive || speechActive)) {
+    // Keep only the latest recent reminder; never replay a backlog after a chat.
+    queuedNotice = { message, expiresAt: Date.now() + 60000 };
+    return;
+  }
+  const wasStreaming = bubbleStreaming;
+  bubbleStreaming = message.streaming === true;
   const text = typeof message === "string" ? message : message.text;
   const bubbleText = typeof message === "object" && message.bubbleText ? message.bubbleText : text;
   const action = typeof message === "object" ? message.action : "";
-  showBubble(bubbleText);
+  if (isChat) {
+    if (!conversationActive || (!wasStreaming && bubbleStreaming)) conversationAction = "idle";
+    conversationActive = true;
+    if (action && character.states[action]) conversationAction = action;
+    window.clearTimeout(idleTimer);
+    temporaryToken += 1;
+  }
+  stopSpeech();
+  showBubble(bubbleText, message.duration);
   if (typeof message !== "object" || message.speak !== false) {
     speakText(text);
-  } else {
-    stopSpeech();
   }
-  if (settings.expressionMode === "automatic" && !dragStart && action && character.states[action]) {
-    playTemporary(action, Math.max(temporaryDuration(action), 1200));
+  if (settings.expressionMode === "automatic" && !dragStart) {
+    if (isChat) setState(conversationAction);
+    else if (action && character.states[action]) playTemporary(action, Math.max(temporaryDuration(action), 1200));
   }
+  if (message.notification) window.desktopPet.presentNotification?.(message.notification);
 }
 
 function startupGreetingText() {
@@ -499,10 +558,7 @@ function scheduleStartupGreeting() {
   if (didShowStartupGreeting) return;
   didShowStartupGreeting = true;
   window.setTimeout(() => {
-    showBubble(startupGreetingText(), 2800);
-    if (settings.expressionMode === "automatic" && !dragStart && character.states.waving) {
-      playTemporary("waving", 1200);
-    }
+    handlePetMessage({ text: startupGreetingText(), action: "waving", duration: 2800, speak: false });
   }, 650);
 }
 
@@ -520,7 +576,7 @@ function loadSprite(spritePath) {
 canvas.addEventListener("pointerdown", beginDrag);
 canvas.addEventListener("dblclick", handleDoubleClick);
 canvas.addEventListener("pointerenter", () => {
-  if (settings.expressionMode !== "automatic" || dragStart || performance.now() < hoverReadyAt) return;
+  if (settings.expressionMode !== "automatic" || conversationActive || dragStart || performance.now() < hoverReadyAt) return;
   hoverReadyAt = performance.now() + 10000;
   if (state === "idle") playTemporary("waving", 900);
 });
@@ -532,7 +588,7 @@ function cancelDrag() {
   window.clearInterval(dragInterval);
   window.desktopPet.dragEnd();
   canvas.classList.remove("dragging");
-  setState("idle");
+  if (settings.expressionMode === "automatic") setState(conversationActive ? conversationAction : "idle");
 }
 window.addEventListener("blur", cancelDrag);
 window.addEventListener("pointercancel", cancelDrag);
