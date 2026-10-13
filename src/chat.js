@@ -30,6 +30,7 @@ let chatRevision = 0;
 let sendToken = 0;
 let activeLanguage = "zh-CN";
 let voiceError = false;
+let renderedHistoryKey = "";
 
 function text(key, variables = {}) {
   return i18n.t(key, variables, activeLanguage);
@@ -78,6 +79,10 @@ function renderHeader() {
 }
 
 function renderHistory() {
+  retryButton.hidden = !history.at(-1)?.failed || sending || remoteBusy;
+  const key = JSON.stringify([history, pendingMessage, characterName, activeLanguage, isLlmReady()]);
+  if (key === renderedHistoryKey) return;
+  renderedHistoryKey = key;
   const nearBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 60;
   const previousScroll = messagesEl.scrollTop;
   messagesEl.textContent = "";
@@ -111,7 +116,6 @@ function renderHistory() {
     messagesEl.append(row);
   }
   messagesEl.scrollTop = nearBottom ? messagesEl.scrollHeight : previousScroll;
-  retryButton.hidden = !history.at(-1)?.failed || sending || remoteBusy;
 }
 
 function applyChatState(state = {}) {

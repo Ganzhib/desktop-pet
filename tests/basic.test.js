@@ -60,14 +60,14 @@ test("GPT-SoVITS sends configured reference and language fields in both request 
     return new Response(new Uint8Array([1, 2, 3]), { headers: { "content-type": "audio/wav" } });
   } });
   app.run('settings = normalizeSettings({tts:{enabled:true,provider:"gptsovits",referenceAudioPath:"reference.wav",promptText:"Reference text",textLanguage:"ja",promptLanguage:"en"}})');
-  assert.equal((await app.run('synthesizeSpeech(null,"Reply")')).ok, true);
+  assert.equal((await app.run('synthesizeSpeechWithSettings("Reply")')).ok, true);
   const body = JSON.parse(requests[0].options.body);
   assert.equal(body.ref_audio_path, "reference.wav");
   assert.equal(body.text_lang, "ja");
   assert.equal(body.prompt_lang, "en");
   assert.equal(body.streaming_mode, false);
   app.run('settings.tts.requestMode = "query"');
-  assert.equal((await app.run('synthesizeSpeech(null,"Reply")')).ok, true);
+  assert.equal((await app.run('synthesizeSpeechWithSettings("Reply")')).ok, true);
   assert.equal(requests[1].options.method, "GET");
   assert.equal(new URL(requests[1].url).searchParams.get("ref_audio_path"), "reference.wav");
 });

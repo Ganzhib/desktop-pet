@@ -30,12 +30,21 @@ body {
   cursor: grabbing;
 }
 
-#speech-bubble {
+#speech-panel {
   position: absolute;
   top: 8px;
   left: 50%;
-  box-sizing: border-box;
   width: min(296px, calc(100vw - 18px));
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#speech-bubble {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
   max-height: 108px;
   min-height: 34px;
   padding: 9px 12px;
@@ -50,7 +59,7 @@ body {
   overflow: auto;
   overflow-wrap: anywhere;
   backdrop-filter: blur(8px);
-  transform: translate(-50%, -8px) scale(0.98);
+  transform: translateY(-8px) scale(0.98);
   opacity: 0;
   visibility: hidden;
   cursor: pointer;
@@ -74,7 +83,7 @@ body {
 #speech-bubble.visible {
   opacity: 1;
   visibility: visible;
-  transform: translate(-50%, 0) scale(1);
+  transform: translateY(0) scale(1);
 }
 #speech-bubble:focus-visible { outline: 2px solid #316e74; outline-offset: -3px; }
 
@@ -94,3 +103,13 @@ body {
 }
 #talk:hover { background: #edf6f5; }
 #talk:focus-visible { outline: 2px solid #316e74; outline-offset: 2px; }
+
+.has-voice-controls #speech-bubble { max-height: 78px; }
+#voice-controls {
+  box-sizing: border-box;
+  height: 28px;
+  padding: 0 4px 0 9px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.95);
+  pointer-events: auto;
+}

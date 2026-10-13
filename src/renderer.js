@@ -67,6 +67,8 @@ let didShowStartupGreeting = false;
 let activeLanguage = "zh-CN";
 let spriteLoadToken = 0;
 let speechToken = 0;
+let speechGeneration = 0;
+let speechId = null;
 let activeAudio = null;
 let speechActive = false;
 let speechWatchdog;
@@ -204,6 +206,7 @@ function normalizeCharacter(nextCharacter) {
 }
 
 function applyAppState(nextAppState = {}) {
+  if (Number.isFinite(nextAppState.speechGeneration)) speechGeneration = Math.max(speechGeneration, nextAppState.speechGeneration);
   const nextCharacter = normalizeCharacter(nextAppState.activeCharacter);
   const characterChanged = nextCharacter.id !== character.id;
   const modeChanged = nextAppState.settings?.expressionMode !== settings.expressionMode;
@@ -484,8 +487,7 @@ talkButton.addEventListener("click", () => window.desktopPet.openQuickChatWindow
 
 function finishSpeech(token, failed = false) {
   if (token !== speechToken) return;
-  stopSpeech();
-  if (failed) window.desktopPet.voicePlaybackError();
+  stopSpeech(failed ? "error" : "idle");
   if (bubbleVisible) hideBubbleLater(Math.max(3000, bubbleRemaining));
 }
 
@@ -504,11 +506,15 @@ function chooseTtsVoice() {
     || voices[0];
 }
 
-function stopSpeech() {
+function stopSpeech(status = "idle") {
   speechToken += 1;
   speechActive = false;
+  if (speechId !== null) window.desktopPet.speechStateChanged({ id: speechId, status });
+  speechId = null;
   window.clearTimeout(speechWatchdog);
   if (activeAudio) {
+    activeAudio.onended = null;
+    activeAudio.onerror = null;
     activeAudio.pause();
     activeAudio.src = "";
     activeAudio = null;
@@ -519,35 +525,64 @@ function stopSpeech() {
 async function speakText(text) {
   stopSpeech();
   const token = speechToken;
-  if (!settings.tts?.enabled || !text) return;
+  if (!settings.tts?.enabled || settings.tts.provider === "none" || !String(text || "").trim()) return;
   speechActive = true;
   window.clearTimeout(bubbleTimer);
-  speechWatchdog = window.setTimeout(() => finishSpeech(token, true), 300000);
-  if (settings.tts.provider && !["none", "system"].includes(settings.tts.provider)) {
-    try {
-      const result = await window.desktopPet.synthesizeSpeech(text);
-      if (token !== speechToken || !settings.tts.enabled) return;
-      if (!result?.ok || !result.audioDataUrl) { finishSpeech(token, true); return; }
-      activeAudio = new Audio(result.audioDataUrl);
-      activeAudio.onended = () => finishSpeech(token);
-      activeAudio.onerror = () => finishSpeech(token, true);
-      await activeAudio.play();
-    } catch {
-      finishSpeech(token, true);
+  try {
+    const id = await window.desktopPet.beginSpeech(speechGeneration);
+    if (token !== speechToken) {
+      if (id !== null) window.desktopPet.speechStateChanged({ id, status: "idle" });
+      return;
     }
-    return;
+    if (id === null) { finishSpeech(token); return; }
+    speechId = id;
+    const external = settings.tts.provider !== "system";
+    const chunks = window.DesktopPetSpeechText.splitSpeechText(text, external ? 800 : 400);
+    let index = 0;
+    const playNext = async () => {
+      if (token !== speechToken) return;
+      if (index === chunks.length) { finishSpeech(token); return; }
+      const chunk = chunks[index++];
+      window.clearTimeout(speechWatchdog);
+      speechWatchdog = window.setTimeout(() => finishSpeech(token, true), 300000);
+      window.desktopPet.speechStateChanged({ id, status: "preparing" });
+      try {
+        if (external) {
+          const result = await window.desktopPet.synthesizeSpeech({ id, text: chunk });
+          if (token !== speechToken) return;
+          if (!result?.ok || !result.audioDataUrl) { finishSpeech(token, !result?.cancelled); return; }
+          activeAudio = new Audio(result.audioDataUrl);
+          activeAudio.onended = playNext;
+          activeAudio.onerror = () => finishSpeech(token, true);
+          await activeAudio.play();
+          if (token === speechToken) window.desktopPet.speechStateChanged({ id, status: "playing" });
+        } else {
+          if (!("speechSynthesis" in window)) { finishSpeech(token, true); return; }
+          const utterance = new SpeechSynthesisUtterance(chunk);
+          const voice = chooseTtsVoice();
+          if (voice) utterance.voice = voice;
+          utterance.rate = Math.min(Math.max(Number(settings.tts.rate) || 1, 0.5), 1.8);
+          utterance.pitch = Math.min(Math.max(Number(settings.tts.pitch) || 1, 0.5), 1.8);
+          utterance.onstart = () => {
+            if (token === speechToken) window.desktopPet.speechStateChanged({ id, status: "playing" });
+          };
+          utterance.onend = playNext;
+          utterance.onerror = () => finishSpeech(token, true);
+          window.speechSynthesis.speak(utterance);
+        }
+      } catch { finishSpeech(token, true); }
+    };
+    await playNext();
+  } catch {
+    finishSpeech(token, true);
   }
-  if (!("speechSynthesis" in window)) { finishSpeech(token, true); return; }
-  const utterance = new SpeechSynthesisUtterance(String(text).slice(0, 500));
-  const voice = chooseTtsVoice();
-  if (voice) utterance.voice = voice;
-  utterance.rate = Math.min(Math.max(Number(settings.tts.rate) || 1, 0.5), 1.8);
-  utterance.pitch = Math.min(Math.max(Number(settings.tts.pitch) || 1, 0.5), 1.8);
-  utterance.onend = () => finishSpeech(token);
-  utterance.onerror = () => finishSpeech(token, true);
-  window.speechSynthesis.cancel();
-  window.speechSynthesis.speak(utterance);
 }
+
+window.desktopPet.onSpeechStopped((generation) => {
+  speechGeneration = Math.max(speechGeneration, generation);
+  stopSpeech();
+  if (bubbleVisible) hideBubbleLater(Math.max(3000, bubbleRemaining));
+});
 
 function handlePetMessage(message = {}) {
   if (message.clear) {

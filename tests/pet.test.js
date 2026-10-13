@@ -56,12 +56,14 @@ test("turning voice off ignores late synthesis and stops current audio", async (
   const pet = loadPet({ synthesizeSpeech: () => new Promise((done) => { resolve = done; }) });
   pet.run('settings.tts = {enabled:true,provider:"custom"}');
   const pending = pet.run('speakText("Reply")');
+  await new Promise((done) => setImmediate(done));
   pet.run('applyAppState({settings:{tts:{enabled:false,provider:"none"}}})');
   resolve({ ok: true, audioDataUrl: "first" });
   await pending;
   assert.equal(pet.audio.length, 0);
   pet.run('settings.tts = {enabled:true,provider:"custom"}');
   const playing = pet.run('speakText("Reply")');
+  await new Promise((done) => setImmediate(done));
   resolve({ ok: true, audioDataUrl: "second" });
   await playing;
   assert.equal(pet.audio[0].played, true);
@@ -74,7 +76,9 @@ test("newer speech wins and clearing chat stops audio", async () => {
   const pet = loadPet({ synthesizeSpeech: () => new Promise((resolve) => pending.push(resolve)) });
   pet.run('settings.tts = {enabled:true,provider:"custom"}');
   const first = pet.run('speakText("First")');
+  await new Promise((done) => setImmediate(done));
   const second = pet.run('speakText("Second")');
+  await new Promise((done) => setImmediate(done));
   pending[1]({ ok: true, audioDataUrl: "second" });
   await second;
   pending[0]({ ok: true, audioDataUrl: "first" });

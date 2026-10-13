@@ -61,6 +61,7 @@ test("synthesis and playback both hold the bubble until audio ends", async () =>
   pet.bubble.events.mouseleave();
   assert.equal(pet.run("speechActive"), true);
   assert.equal(pet.timeouts.has(pet.run("bubbleTimer")), false);
+  await new Promise((done) => setImmediate(done));
   resolve({ ok: true, audioDataUrl: "audio" });
   await new Promise((done) => setImmediate(done));
   assert.equal(pet.audio[0].played, true);
@@ -76,7 +77,7 @@ test("synthesis and playback both hold the bubble until audio ends", async () =>
 
 test("voice errors preserve the text reply and release the presentation hold", async () => {
   let errors = 0;
-  const pet = loadPet({ synthesizeSpeech: async () => ({ ok: false }), voicePlaybackError: () => errors++ });
+  const pet = loadPet({ synthesizeSpeech: async () => ({ ok: false }), speechStateChanged: ({ status }) => { if (status === "error") errors++; } });
   pet.run('settings.tts = {enabled:true,provider:"custom"}; handlePetMessage({source:"chat",text:"Keep this reply",action:"review"})');
   await new Promise((done) => setImmediate(done));
   assert.equal(errors, 1);
@@ -106,6 +107,7 @@ test("system speech completion and watchdog release the bubble", async () => {
     pet.context.window.speechSynthesis = { cancel() {}, getVoices: () => [], speak: (value) => { utterance = value; } };
     pet.run('settings.tts = {enabled:true,provider:"system"}; handlePetMessage({source:"chat",text:"Spoken reply",action:"review"})');
     assert.equal(pet.run("speechActive"), true);
+    await new Promise((done) => setImmediate(done));
     if (useWatchdog) pet.fireTimer(pet.run("speechWatchdog"));
     else utterance.onend();
     assert.equal(pet.run("speechActive"), false);

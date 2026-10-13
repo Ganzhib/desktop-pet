@@ -15,9 +15,17 @@ contextBridge.exposeInMainWorld("desktopPet", {
   previewCharacterImport: (kind) => ipcRenderer.invoke("preview-character-import", kind),
   confirmCharacterImport: (token) => ipcRenderer.invoke("confirm-character-import", token),
   removeCharacterImport: (id) => ipcRenderer.invoke("remove-character-import", id),
-  voicePlaybackError: () => ipcRenderer.send("voice-playback-error"),
+  beginSpeech: (generation) => ipcRenderer.invoke("begin-speech", generation),
+  speechStateChanged: (change) => ipcRenderer.send("speech-state-changed", change),
+  stopVoice: () => ipcRenderer.invoke("stop-voice"),
+  replaySpeech: () => ipcRenderer.invoke("replay-speech"),
+  onSpeechStopped: (callback) => {
+    const listener = (_event, generation) => callback(generation);
+    ipcRenderer.on("speech-stopped", listener);
+    return () => ipcRenderer.off("speech-stopped", listener);
+  },
   presentNotification: (notice) => ipcRenderer.send("present-notification", notice),
-  synthesizeSpeech: (text) => ipcRenderer.invoke("synthesize-speech", text),
+  synthesizeSpeech: (request) => ipcRenderer.invoke("synthesize-speech", request),
   openChatWindow: () => ipcRenderer.send("open-chat-window"),
   openQuickChatWindow: () => ipcRenderer.send("open-quick-chat-window"),
   openCompanionSettings: () => ipcRenderer.send("open-companion-settings"),

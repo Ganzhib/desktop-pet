@@ -46,10 +46,10 @@ function loadMain(overrides = {}) {
   return { context, writes, run: (code) => vm.runInContext(code, context) };
 }
 
-function loadRenderer(file, api = {}) {
+function loadRenderer(file, api = {}, htmlFile = file.replace(/\.js$/, ".html")) {
   const nodes = new Map();
   const formIds = new Set();
-  const html = fs.readFileSync(path.join(sourceDir, file.replace(/\.js$/, ".html")), "utf8");
+  const html = fs.readFileSync(path.join(sourceDir, htmlFile), "utf8");
   for (const match of html.matchAll(/<(?:input|textarea|select)\b[^>]*\bid="([^"]+)"/g)) {
     formIds.add(`#${match[1]}`);
   }
@@ -63,6 +63,7 @@ function loadRenderer(file, api = {}) {
     };
   }
   const document = {
+    body: element(),
     documentElement: {},
     querySelector(selector) {
       if (!nodes.has(selector)) nodes.set(selector, element());

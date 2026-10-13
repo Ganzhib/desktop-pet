@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
 
-**0.3.0 shared memories and touch responses:** optional memories for each character, gentle local interactions, and more reliable manual expression controls. [Release notes](docs/releases/v0.3.0.md).
+**0.4.0 voice controls:** stop or replay a reply beside the pet, see when voice is preparing or playing, and hear longer replies without the previous fixed cutoff. [Release notes](docs/releases/v0.4.0.md).
 
 [![Build](https://github.com/TonyNa-code/desktop-pet/actions/workflows/build.yml/badge.svg)](https://github.com/TonyNa-code/desktop-pet/actions/workflows/build.yml)
 [![Latest Release](https://img.shields.io/github/v/release/TonyNa-code/desktop-pet?label=latest%20release)](https://github.com/TonyNa-code/desktop-pet/releases/latest)
@@ -141,11 +141,12 @@ API keys are stored only on this device. The app uses system secure storage when
 
 ### Companion Features
 
-Available in 0.3.0:
+Available in 0.4.0:
 
 - The pet's Talk button opens an input box beside the character. It follows the pet as it moves, shows the character's name, and links to history and settings. Replies remain in the pet bubble, including the full text of longer responses.
 - Replies can select an expression from the current character pack. Missing or unrecognized expressions stay neutral rather than guessing from emotional keywords. Click-only expression mode remains manual.
 - Conversation gestures play once and hold while the reply is visible, with no idle or hover interruption. Bubbles stay visible during voice generation and playback. Voice errors leave the text reply intact.
+- Voice controls appear beside the pet, in Quick Input and in Full Chat. Stop during synthesis or playback without losing the written reply. Replay the latest successful reply for the current character without requesting another model answer or changing affection.
 - Break and focus reminders wait until the current reply is dismissed. Only the latest queued notice is kept, and notices older than a minute are discarded.
 - Standard editing shortcuts and input-field context menus support pasting API keys and messages.
 - Settings are grouped into General, Character, Memories, Chat and Voice, with a fixed save bar and unsaved-change confirmation.
@@ -162,6 +163,8 @@ Voice is off by default. Supported voice backends:
 - Custom voice API: for cloud voice services or your own wrapper. The app sends a JSON template where `{{text}}` is replaced with the text to speak.
 
 `Test Voice` sends a real request with the current voice configuration. GPT-SoVITS and custom APIs should return an audio stream, or JSON containing an audio URL, base64 audio, or a data URL.
+
+Long replies are read in segments, without the former 500 / 800 character cutoff. Sending a new message, changing characters, clearing chat or changing voice settings stops the current voice and cancels pending voice requests. Replay uses your current voice service. External services receive a request per segment and may charge for it; stopping cannot recall text already sent or guarantee a refund. Voice stays off by default, with no microphone input or recording.
 
 ### Shared Memories And Touch
 

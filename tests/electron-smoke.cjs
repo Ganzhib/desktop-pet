@@ -20,6 +20,8 @@ const requests = [];
 let delayedResponse;
 let streamResponse;
 let ttsRequest;
+const voiceRequests = [];
+let slowVoiceClosed = false;
 let retryAttempts = 0;
 const server = http.createServer((req, res) => {
   let body = "";
@@ -32,6 +34,12 @@ const server = http.createServer((req, res) => {
     }
     if (req.url.startsWith("/tts")) {
       ttsRequest = { method: req.method, url: req.url, body };
+      voiceRequests.push(ttsRequest);
+      if (req.url === "/tts-slow") {
+        slowVoiceClosed = false;
+        res.on("close", () => { slowVoiceClosed = true; });
+        return;
+      }
       res.writeHead(200, { "content-type": "audio/wav" });
       res.end(req.url.startsWith("/tts-invalid") ? Buffer.alloc(800) : wav);
       return;
@@ -69,7 +77,7 @@ function evaluate(window, fn, ...args) {
   return window.webContents.executeJavaScript(`(${fn.toString()})(...${JSON.stringify(args)})`, true);
 }
 async function findWindow(file) {
-  const window = await until(() => BrowserWindow.getAllWindows().find((candidate) => candidate.webContents.getURL().endsWith(file)), file);
+  const window = await until(() => BrowserWindow.getAllWindows().find((candidate) => candidate.webContents.getURL().endsWith(`/${file}`)), file);
   await until(() => !window.webContents.isLoading(), `${file} loaded`);
   await evaluate(window, () => {
     window.smokeErrors = [];
@@ -355,8 +363,62 @@ async function run() {
   assert.equal(await evaluate(pet, () => speechActive && bubbleVisible && state === "review"), true);
   await until(() => evaluate(pet, () => !speechActive), "reply voice finishes");
   assert.equal(await evaluate(pet, () => bubbleVisible), true);
+  for (const window of [pet, chat, quick]) {
+    assert.equal(await evaluate(window, () => document.querySelector("#voice-controls").hidden), false);
+    assert.equal(await evaluate(window, () => document.querySelector("#voice-toggle").textContent), "Replay");
+  }
+  const beforeReplay = requests.length;
+  await evaluate(quick, () => { document.querySelector("#voice-toggle").click(); document.querySelector("#voice-toggle").click(); });
+  await until(() => evaluate(pet, () => speechActive && activeAudio && !activeAudio.paused), "quick input replays voice");
+  assert.equal(requests.length, beforeReplay);
+  for (const window of [pet, chat, quick]) {
+    await until(() => evaluate(window, () => document.querySelector("#voice-status").textContent === "Speaking…"), "speaking state synchronized");
+  }
+  await screenshot(pet, "pet-speaking");
+  await screenshot(quick, "quick-speaking");
+  await screenshot(chat, "chat-speaking");
+  const replayText = await evaluate(pet, () => speechBubble.textContent);
+  await evaluate(pet, () => document.querySelector("#voice-toggle").click());
+  await until(() => evaluate(pet, () => !speechActive && !activeAudio), "pet voice stop");
+  assert.equal(await evaluate(pet, () => speechBubble.textContent), replayText);
+  await evaluate(chat, () => document.querySelector("#voice-toggle").click());
+  await until(() => evaluate(pet, () => speechActive && activeAudio && !activeAudio.paused), "full chat replays voice");
+  await evaluate(quick, () => document.querySelector("#voice-toggle").click());
+  await until(() => evaluate(pet, () => !speechActive), "quick input stops voice");
+
+  await evaluate(settings, (url) => window.desktopPet.saveChatConfig({ tts: { endpoint: `${url}/tts-slow` } }), endpoint);
+  const slowStart = voiceRequests.length;
+  await evaluate(chat, () => document.querySelector("#voice-toggle").click());
+  await until(() => voiceRequests.length > slowStart, "slow voice request reaches server");
+  await until(() => evaluate(chat, () => document.querySelector("#voice-status").textContent === "Preparing voice…"), "preparing state visible");
+  await evaluate(chat, () => document.querySelector("#voice-toggle").click());
+  await until(() => slowVoiceClosed, "stop aborts synthesis connection");
+  assert.equal((await evaluate(pet, () => window.desktopPet.getChatState())).voiceError, false);
+  const slowAgain = voiceRequests.length;
+  await evaluate(quick, () => document.querySelector("#voice-toggle").click());
+  await until(() => voiceRequests.length > slowAgain, "second slow synthesis");
+  await evaluate(quick, () => window.desktopPet.sendChatMessage("Interrupt voice"));
+  await until(() => slowVoiceClosed, "new message aborts old synthesis");
+  await evaluate(pet, () => window.desktopPet.stopVoice());
+
+  await evaluate(settings, (url) => window.desktopPet.saveChatConfig({ tts: { endpoint: `${url}/tts` } }), endpoint);
+  const longStart = voiceRequests.length;
+  await evaluate(pet, () => handlePetMessage({ source: "chat", text: "Long voice reply. ".repeat(60) + "Final sentence.", action: "idle" }));
+  await until(() => voiceRequests.length >= longStart + 2, "long reply continues past 800 characters");
+  await until(() => evaluate(pet, () => !speechActive), "all long reply audio finishes");
+  assert.equal(voiceRequests.slice(longStart).map((request) => JSON.parse(request.body).text).join(" ").replace(/\s+/g, " "), "Long voice reply. ".repeat(60) + "Final sentence.");
+  await evaluate(chat, () => document.querySelector("#voice-toggle").click());
+  await until(() => evaluate(pet, () => speechActive), "replay before disabling voice");
+  await evaluate(settings, () => window.desktopPet.saveChatConfig({ tts: { enabled: false } }));
+  await until(() => evaluate(pet, () => !speechActive && document.querySelector("#voice-controls").hidden), "disabling voice stops and hides pet controls");
+  await evaluate(settings, () => window.desktopPet.saveChatConfig({ tts: { enabled: true } }));
   await evaluate(pet, () => handlePetMessage({ clear: true }));
-  const voice = await evaluate(pet, () => window.desktopPet.synthesizeSpeech("Voice test"));
+  const voice = await evaluate(pet, async () => {
+    const id = await window.desktopPet.beginSpeech(speechGeneration);
+    const result = await window.desktopPet.synthesizeSpeech({ id, text: "Voice test" });
+    window.desktopPet.speechStateChanged({ id, status: "idle" });
+    return result;
+  });
   assert.equal(voice.ok, true);
   assert.ok(voice.audioDataUrl.startsWith("data:audio/wav;base64,"));
   assert.equal(await evaluate(pet, (url) => new Promise((resolve) => {

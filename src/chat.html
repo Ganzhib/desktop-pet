@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Companion Chat</title>
     <link rel="stylesheet" href="./chat.css" />
+    <link rel="stylesheet" href="./voice-controls.css" />
   </head>
   <body>
     <main class="chat-shell">
@@ -17,6 +18,10 @@
       </header>
 
       <section id="messages" class="messages" aria-live="polite"></section>
+      <div id="voice-controls" class="voice-controls" hidden>
+        <span id="voice-status" role="status"></span>
+        <button id="voice-toggle" type="button"></button>
+      </div>
 
       <form id="composer" class="composer">
         <textarea id="message-input" rows="2" maxlength="1200" placeholder="和她说点什么..." autofocus></textarea>
@@ -32,5 +37,6 @@
     </main>
     <script src="./i18n.js"></script>
     <script src="./chat.js"></script>
+    <script src="./voice-controls.js"></script>
   </body>
 </html>

@@ -31,8 +31,10 @@ function loadPet(api = {}) {
   }
   const window = {
     DesktopPetI18n: i18n,
+    DesktopPetSpeechText: require("../src/speech-text"),
     desktopPet: { getAppState: () => new Promise(() => {}), onAppStateUpdated() {}, onPetMessage() {},
-      recordInteraction() {}, dragStart() {}, dragEnd() {}, voicePlaybackError() {}, openChatWindow() {}, ...api },
+      recordInteraction() {}, dragStart() {}, dragEnd() {}, beginSpeech: async () => 1,
+      speechStateChanged() {}, onSpeechStopped() {}, openChatWindow() {}, ...api },
     addEventListener(name, handler) { events[name] = handler; },
     setInterval(fn) { intervals.set(++timerId, fn); return timerId; },
     clearInterval(id) { intervals.delete(id); },

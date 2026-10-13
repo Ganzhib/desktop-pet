@@ -112,6 +112,9 @@ let chatRequest = null;
 let chatRevision = 0;
 let characterSessions = {};
 let voiceError = false;
+let speechGeneration = 0;
+let speechSequence = 0;
+let speechSession = null;
 let pendingImport = null;
 
 function importedCharactersDir() { return path.join(app.getPath("userData"), "characters"); }
@@ -333,6 +336,7 @@ function publicSettings() {
 
 function appState() {
   return {
+    speechGeneration,
     language: settings.language,
     resolvedLanguage: activeLanguage(),
     settings: publicSettings(),
@@ -704,6 +708,8 @@ function createWindow() {
   mainWindow.once("ready-to-show", () => mainWindow.showInactive());
   mainWindow.on("move", positionQuickChatWindow);
   mainWindow.on("resize", positionQuickChatWindow);
+  mainWindow.webContents.on("render-process-gone", () => stopVoice());
+  mainWindow.webContents.on("did-start-loading", () => stopVoice());
 }
 
 function enableInputMenu(window) {
@@ -856,6 +862,7 @@ function updateSettings(patch) {
     memory: { ...settings.memory, ...patch?.memory },
   };
   const normalized = normalizeSettings(nextSettings);
+  if (JSON.stringify(normalized.tts) !== JSON.stringify(settings.tts)) stopVoice();
   if (normalized.characterId !== settings.characterId
     || JSON.stringify(normalized.persona) !== JSON.stringify(settings.persona)
     || JSON.stringify(normalized.memory) !== JSON.stringify(settings.memory)
@@ -879,6 +886,7 @@ function updateSettings(patch) {
     mainWindow.setAlwaysOnTop(settings.alwaysOnTop);
     applyWindowSize();
     mainWindow.webContents.send("app-state-updated", appState());
+    mainWindow.webContents.send("chat-state-updated", chatState());
   }
   if (chatWindow && !chatWindow.isDestroyed()) {
     chatWindow.setAlwaysOnTop(settings.alwaysOnTop);
@@ -1127,6 +1135,11 @@ function chatState() {
     busy: Boolean(chatRequest),
     pending: chatRequest ? { content: chatRequest.text, createdAt: chatRequest.createdAt, reply: chatRequest.reply || "" } : null,
     voiceError,
+    voice: {
+      status: speechSession?.status || "idle",
+      enabled: settings.tts.enabled && settings.tts.provider !== "none",
+      canReplay: !chatRequest && !speechSession && Boolean(lastSpokenReply()) && settings.tts.enabled && settings.tts.provider !== "none",
+    },
     characters,
     character: (() => {
       const pack = getCharacterPack();
@@ -1414,6 +1427,7 @@ async function sendChatMessage(_event, rawText) {
   }
   if (chatRequest) return { ok: false, error: "chat_busy", ...chatState() };
 
+  stopVoice();
   const request = { text, createdAt: Date.now(), revision: chatRevision, controller: new AbortController() };
   chatRequest = request;
   voiceError = false;
@@ -1461,6 +1475,7 @@ function broadcastChatState() {
 }
 
 function cancelPendingChat() {
+  stopVoice();
   chatRevision += 1;
   const request = chatRequest;
   chatRequest = null;
@@ -1580,8 +1595,8 @@ async function responseErrorText(response) {
   }
 }
 
-async function synthesizeSpeechWithSettings(rawText, nextSettings = settings) {
-  const text = compactAssistantReply(rawText).slice(0, 800);
+async function synthesizeSpeechWithSettings(rawText, nextSettings = settings, controller = new AbortController()) {
+  const text = compactAssistantReply(rawText);
   const tts = nextSettings.tts || DEFAULT_SETTINGS.tts;
   if (!text || !tts.enabled || ["none", "system"].includes(tts.provider)) {
     return { ok: false, skipped: true };
@@ -1592,8 +1607,9 @@ async function synthesizeSpeechWithSettings(rawText, nextSettings = settings) {
     return { ok: false, error: "missing_tts_endpoint" };
   }
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 45000);
+  if (controller.signal.aborted) return { ok: false, cancelled: true };
+  let expired = false;
+  const timeout = setTimeout(() => { expired = true; controller.abort(); }, 45000);
   try {
     const headers = {};
     if (tts.apiKey) headers.Authorization = `Bearer ${tts.apiKey}`;
@@ -1634,14 +1650,77 @@ async function synthesizeSpeechWithSettings(rawText, nextSettings = settings) {
     if (!audioDataUrl) return { ok: false, error: "empty_audio" };
     return { ok: true, audioDataUrl };
   } catch (error) {
+    if (controller.signal.aborted && !expired) return { ok: false, cancelled: true };
     return { ok: false, error: error?.name === "AbortError" ? "tts_timeout" : "tts_request_failed" };
   } finally {
     clearTimeout(timeout);
   }
 }
 
-async function synthesizeSpeech(_event, rawText) {
-  return synthesizeSpeechWithSettings(rawText, settings);
+function lastSpokenReply() {
+  return [...chatHistory].reverse().find((item) => item.role === "assistant" && !item.failed && item.content?.trim());
+}
+
+function stopVoice() {
+  speechGeneration += 1;
+  speechSession?.controller?.abort();
+  speechSession = null;
+  voiceError = false;
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send("speech-stopped", speechGeneration);
+  }
+  broadcastChatState();
+  return chatState();
+}
+
+function beginSpeech(event, generation) {
+  if (!mainWindow || event.sender !== mainWindow.webContents || generation !== speechGeneration
+    || !settings.tts.enabled || settings.tts.provider === "none") return null;
+  speechSession?.controller?.abort();
+  speechSession = { id: ++speechSequence, status: "preparing", controller: null };
+  voiceError = false;
+  broadcastChatState();
+  return speechSession.id;
+}
+
+function speechStateChanged(event, change) {
+  if (!mainWindow || event.sender !== mainWindow.webContents || !speechSession
+    || change?.id !== speechSession.id) return;
+  if (["idle", "error"].includes(change.status)) {
+    speechSession.controller?.abort();
+    speechSession = null;
+    voiceError = change.status === "error";
+  } else if (["preparing", "playing"].includes(change.status)) {
+    speechSession.status = change.status;
+  } else return;
+  broadcastChatState();
+}
+
+function replaySpeech() {
+  const reply = lastSpokenReply();
+  if (!mainWindow || mainWindow.isDestroyed() || chatRequest || speechSession || !reply
+    || !settings.tts.enabled || settings.tts.provider === "none") return chatState();
+  speechSession = { id: ++speechSequence, status: "preparing", controller: null };
+  voiceError = false;
+  broadcastChatState();
+  sendPetMessage(reply.content, "idle", { source: "chat" });
+  return chatState();
+}
+
+async function synthesizeSpeech(event, request) {
+  const session = speechSession;
+  if (!mainWindow || event.sender !== mainWindow.webContents || !session || request?.id !== session.id
+    || session.controller || typeof request.text !== "string" || Array.from(request.text).length > 800) {
+    return { ok: false, cancelled: true };
+  }
+  const controller = new AbortController();
+  session.controller = controller;
+  try {
+    const result = await synthesizeSpeechWithSettings(request.text, settings, controller);
+    return speechSession === session ? result : { ok: false, cancelled: true };
+  } finally {
+    if (session.controller === controller) session.controller = null;
+  }
 }
 
 function showCurrentTime() {
@@ -1843,7 +1922,10 @@ app.whenReady().then(() => {
   ipcMain.handle("preview-character-import", previewCharacterImport);
   ipcMain.handle("confirm-character-import", confirmCharacterImport);
   ipcMain.handle("remove-character-import", removeCharacterImport);
-  ipcMain.on("voice-playback-error", () => { voiceError = true; broadcastChatState(); });
+  ipcMain.handle("begin-speech", beginSpeech);
+  ipcMain.on("speech-state-changed", speechStateChanged);
+  ipcMain.handle("stop-voice", stopVoice);
+  ipcMain.handle("replay-speech", replaySpeech);
   ipcMain.handle("synthesize-speech", synthesizeSpeech);
   ipcMain.on("set-settings", (_event, patch) => updateSettings(patch));
   ipcMain.on("record-interaction", (_event, kind) => updateMoodFromInteraction(kind));
@@ -1878,3 +1960,4 @@ app.whenReady().then(() => {
 });
 
 app.on("window-all-closed", () => app.quit());
+app.on("before-quit", () => speechSession?.controller?.abort());

@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Quick Companion Input</title>
     <link rel="stylesheet" href="./quick-chat.css" />
+    <link rel="stylesheet" href="./voice-controls.css" />
   </head>
   <body>
     <form id="quick-form" class="quick-shell">
@@ -18,8 +19,13 @@
       <button id="send" type="submit">发送</button>
       <button id="stop" type="button" hidden>停止</button>
       <span id="status" role="status"></span>
+      <div id="voice-controls" class="voice-controls" hidden>
+        <span id="voice-status" role="status"></span>
+        <button id="voice-toggle" type="button"></button>
+      </div>
     </form>
     <script src="./i18n.js"></script>
     <script src="./quick-chat.js"></script>
+    <script src="./voice-controls.js"></script>
   </body>
 </html>

@@ -1,7 +1,7 @@
 function companionBounds(pet, area) {
   const gap = 10;
   const width = Math.min(360, area.width);
-  const height = Math.min(110, area.height);
+  const height = Math.min(122, area.height);
   const clamp = (n, min, max) => Math.min(Math.max(n, min), max);
   const candidates = [
     { x: pet.x + pet.width + gap, y: pet.y + pet.height - height },

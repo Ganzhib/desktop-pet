@@ -115,8 +115,8 @@ test("chat completion and clearing are broadcast to both chat windows", async ()
   const { app, finish } = deferredApp();
   app.run('globalThis.events = []; chatWindow = quickChatWindow = {isDestroyed:()=>false,webContents:{send:(topic,state)=>events.push({topic,state})}}');
   const pending = app.run('sendChatMessage(null,"hello")');
-  assert.equal(app.run("events.length"), 2);
-  assert.equal(app.run("events[0].state.busy"), true);
+  assert.equal(app.run("events.length"), 4);
+  assert.equal(app.run("events.at(-1).state.busy"), true);
   finish(0, "Reply");
   await pending;
   assert.equal(app.run("events.at(-1).state.history.length"), 2);

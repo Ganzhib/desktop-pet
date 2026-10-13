@@ -19,8 +19,8 @@ input {
 
 .quick-shell {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 48px;
-  grid-template-rows: 24px 36px 16px;
+  grid-template-columns: minmax(0, 1fr) 64px;
+  grid-template-rows: 24px 36px 28px;
   gap: 5px 8px;
   box-sizing: border-box;
   width: 100vw;
@@ -60,8 +60,9 @@ input:focus {
 
 button {
   min-width: 42px;
-  padding: 0 11px;
+  padding: 0 8px;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 button:hover {
@@ -87,5 +88,7 @@ button:disabled {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.has-voice-controls #status { display: none; }
+#voice-controls { grid-column: 1 / -1; }
 [hidden] { display: none !important; }
 button:focus-visible { outline: 2px solid #316e74; outline-offset: 2px; }

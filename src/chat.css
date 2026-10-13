@@ -178,5 +178,7 @@ textarea:focus {
 [hidden] { display: none !important; }
 #stop-message, #retry-message { min-height: 34px; padding: 0 10px; }
 .chat-footer button { flex-shrink: 0; }
+.has-voice-controls .chat-shell { grid-template-rows: auto 1fr auto auto auto; }
+#voice-controls { padding: 0 14px 8px; }
 .message.failed .bubble { border-color: #c9707b; }
 button:focus-visible { outline: 2px solid #316e74; outline-offset: 2px; }
