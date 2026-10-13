@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
 
-**0.4.0 voice controls:** stop or replay a reply beside the pet, see when voice is preparing or playing, and hear longer replies without the previous fixed cutoff. [Release notes](docs/releases/v0.4.0.md).
+**0.4.1 safety update:** safer handling of chat and voice responses, bounded downloads, and credential redaction in service errors. [Release notes and TTS compatibility](docs/releases/v0.4.1.md).
 
 [![Build](https://github.com/TonyNa-code/desktop-pet/actions/workflows/build.yml/badge.svg)](https://github.com/TonyNa-code/desktop-pet/actions/workflows/build.yml)
 [![Latest Release](https://img.shields.io/github/v/release/TonyNa-code/desktop-pet?label=latest%20release)](https://github.com/TonyNa-code/desktop-pet/releases/latest)

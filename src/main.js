@@ -14,6 +14,7 @@ const path = require("node:path");
 const i18n = require("./i18n");
 const validation = require("./config-validation");
 const { readChatResponse } = require("./chat-response");
+const { AUDIO_LIMIT, ERROR_LIMIT, readResponseBytes, readResponseJson, returnedAudioUrl, audioDataUrl: validateAudioDataUrl, redactServiceText } = require("./network-safety");
 const { expressionInstruction, parseCompanionReply } = require("./companion-response");
 const { companionBounds } = require("./companion-layout");
 const { modelsEndpoint, readModelList } = require("./model-list");
@@ -1277,6 +1278,7 @@ async function requestAssistantReply(userText, controller = new AbortController(
     }
     const response = await fetch(llmEndpoint(assistant.baseUrl), {
       method: "POST",
+      redirect: "error",
       headers,
       signal: controller.signal,
       body: JSON.stringify({
@@ -1288,7 +1290,7 @@ async function requestAssistantReply(userText, controller = new AbortController(
     });
 
     if (!response.ok) {
-      const detail = await responseErrorText(response);
+      const detail = await responseErrorText(response, [assistant.apiKey]);
       return {
         reply: t("assistant.statusError", {
           status: response.status,
@@ -1346,6 +1348,7 @@ async function testAssistantConnection(_event, patch = {}) {
     if (assistant.apiKey) headers.Authorization = `Bearer ${assistant.apiKey}`;
     const response = await fetch(llmEndpoint(assistant.baseUrl), {
       method: "POST",
+      redirect: "error",
       headers,
       signal: controller.signal,
       body: JSON.stringify({
@@ -1359,7 +1362,7 @@ async function testAssistantConnection(_event, patch = {}) {
       }),
     });
     if (!response.ok) {
-      const detail = await responseErrorText(response);
+      const detail = await responseErrorText(response, [assistant.apiKey]);
       return {
         ok: false,
         message: t("assistant.test.statusError", {
@@ -1550,46 +1553,50 @@ function appendQuery(url, params) {
 
 function audioContentType(response, provider, tts = settings.tts || DEFAULT_SETTINGS.tts) {
   const contentType = response.headers.get("content-type");
-  if (contentType && contentType.includes("audio/")) return contentType.split(";")[0];
+  if (/^audio\/(wav|x-wav|wave|mpeg|mp3|mp4|ogg|aac|flac|webm)(;|$)/i.test(contentType || "")) return contentType.split(";")[0];
   if (provider === "gptsovits") return `audio/${tts.mediaType || "wav"}`;
-  return contentType || "audio/mpeg";
+  return "audio/mpeg";
 }
 
 async function audioDataFromResponse(response, provider, tts = settings.tts || DEFAULT_SETTINGS.tts, signal) {
   const contentType = response.headers.get("content-type") || "";
   if (contentType.includes("application/json")) {
-    const data = await response.json();
+    const data = await readResponseJson(response, Math.ceil(AUDIO_LIMIT / 3) * 4 + 65536);
     const audioValue = data.audioDataUrl || data.audio_url || data.url || data.audio || data.audio_base64;
     if (!audioValue) return null;
     if (typeof audioValue === "string" && audioValue.startsWith("data:")) {
-      return audioValue;
+      return validateAudioDataUrl(audioValue);
     }
     if (typeof audioValue === "string" && /^https?:\/\//.test(audioValue)) {
-      const audioResponse = await fetch(audioValue, { signal });
+      const target = returnedAudioUrl(audioValue, ttsEndpoint(tts));
+      const audioResponse = await fetch(target, { signal, redirect: "error" });
       if (!audioResponse.ok) return null;
-      const audioBuffer = Buffer.from(await audioResponse.arrayBuffer());
+      const audioBuffer = await readResponseBytes(audioResponse, AUDIO_LIMIT);
+      if (!audioBuffer.length) return null;
       return `data:${audioContentType(audioResponse, provider, tts)};base64,${audioBuffer.toString("base64")}`;
     }
     if (typeof audioValue === "string") {
       const mediaType = provider === "gptsovits" ? tts.mediaType : "mpeg";
-      return `data:audio/${mediaType || "mpeg"};base64,${audioValue}`;
+      return validateAudioDataUrl(`data:audio/${mediaType || "mpeg"};base64,${audioValue}`);
     }
     return null;
   }
-  const buffer = Buffer.from(await response.arrayBuffer());
+  const buffer = await readResponseBytes(response, AUDIO_LIMIT);
   if (!buffer.length) return null;
   return `data:${audioContentType(response, provider, tts)};base64,${buffer.toString("base64")}`;
 }
 
-async function responseErrorText(response) {
+async function responseErrorText(response, secrets = []) {
   try {
+    const body = (await readResponseBytes(response, ERROR_LIMIT)).toString("utf8");
     const contentType = response.headers.get("content-type") || "";
+    const sensitive = [...secrets, settings.assistant?.apiKey, settings.tts?.apiKey];
     if (contentType.includes("application/json")) {
-      const data = await response.json();
+      const data = JSON.parse(body);
       const message = data.message || data.error?.message || data.error || data.Exception || JSON.stringify(data);
-      return String(message).replace(/\s+/g, " ").slice(0, 160);
+      return redactServiceText(message, sensitive).replace(/\s+/g, " ").slice(0, 160);
     }
-    return (await response.text()).replace(/\s+/g, " ").slice(0, 160);
+    return redactServiceText(body, sensitive).replace(/\s+/g, " ").slice(0, 160);
   } catch {
     return "";
   }
@@ -1641,9 +1648,9 @@ async function synthesizeSpeechWithSettings(rawText, nextSettings = settings, co
       }
     }
 
-    const response = await fetch(url, requestOptions);
+    const response = await fetch(url, { ...requestOptions, redirect: "error" });
     if (!response.ok) {
-      const detail = await responseErrorText(response);
+      const detail = await responseErrorText(response, [tts.apiKey]);
       return { ok: false, error: detail ? `tts_status_${response.status}: ${detail}` : `tts_status_${response.status}` };
     }
     const audioDataUrl = await audioDataFromResponse(response, tts.provider, tts, controller.signal);
@@ -1651,6 +1658,8 @@ async function synthesizeSpeechWithSettings(rawText, nextSettings = settings, co
     return { ok: true, audioDataUrl };
   } catch (error) {
     if (controller.signal.aborted && !expired) return { ok: false, cancelled: true };
+    if (error?.message === "audio_origin_not_allowed") return { ok: false, error: t("tts.audioOrigin", {}, nextSettings) };
+    if (error?.message === "response_too_large") return { ok: false, error: t("tts.responseTooLarge", {}, nextSettings) };
     return { ok: false, error: error?.name === "AbortError" ? "tts_timeout" : "tts_request_failed" };
   } finally {
     clearTimeout(timeout);

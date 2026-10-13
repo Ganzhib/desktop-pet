@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
 
-**0.4.0 音声操作の更新：**ペットのそばで読み上げを停止・再生でき、音声の準備・再生状態も確認できます。長い返信の固定文字数での打ち切りを解消しました。[更新内容](docs/releases/v0.4.0.md)。
+**0.4.1 安全性の更新：**チャット・音声応答の検証、ダウンロード量の制限、サービスエラーに含まれるキーの非表示を追加しました。[更新内容と TTS の互換性](docs/releases/v0.4.1.md)。
 
 [![Build](https://github.com/TonyNa-code/desktop-pet/actions/workflows/build.yml/badge.svg)](https://github.com/TonyNa-code/desktop-pet/actions/workflows/build.yml)
 [![Latest Release](https://img.shields.io/github/v/release/TonyNa-code/desktop-pet?label=latest%20release)](https://github.com/TonyNa-code/desktop-pet/releases/latest)

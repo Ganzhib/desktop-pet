@@ -16,6 +16,8 @@
 
   const DICTIONARIES = {
     "zh-CN": {
+      "tts.audioOrigin": "语音链接与服务地址不属于同一来源，请让服务直接返回音频或同来源链接。",
+      "tts.responseTooLarge": "语音响应过大，请缩短文本或调整服务输出。",
       "settings.tabs.general": "通用",
       "settings.tabs.memory": "共同记忆",
       "settings.interactions": "互动短句（自动表情模式）",
@@ -352,6 +354,8 @@
     },
 
     "en-US": {
+      "tts.audioOrigin": "The audio link must use the same origin as the voice service. Use direct audio or a same-origin link.",
+      "tts.responseTooLarge": "The voice response is too large. Shorten the text or adjust the service output.",
       "settings.tabs.general": "General",
       "settings.tabs.memory": "Memories",
       "settings.interactions": "Touch responses (automatic expression mode)",
@@ -688,6 +692,8 @@
     },
 
     "ja-JP": {
+      "tts.audioOrigin": "音声リンクはサービスと同じオリジンである必要があります。音声を直接返すか、同一オリジンのリンクを使用してください。",
+      "tts.responseTooLarge": "音声応答が大きすぎます。文章を短くするか、サービスの出力を調整してください。",
       "settings.tabs.general": "一般",
       "settings.tabs.memory": "思い出",
       "settings.interactions": "ふれあいの一言（自動表情モード）",
