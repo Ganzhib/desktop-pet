@@ -51,10 +51,22 @@ button:disabled {
   background: rgba(255, 255, 255, 0.88);
 }
 
+.chat-header > div { min-width: 0; }
+.chat-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.chat-actions button { display: grid; place-items: center; width: 34px; height: 34px; padding: 0; }
+.chat-actions img { display: block; opacity: 0.75; }
+#chat-subtitle { overflow-wrap: anywhere; }
+.conversation { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; }
+.conversation .messages { height: 100%; box-sizing: border-box; }
+.conversation-footer { display: flex; justify-content: flex-end; padding: 0 14px 6px; }
+#latest-message { display: flex; align-items: center; gap: 6px; min-height: 28px; padding: 0 8px; font-size: 12px; }
+#latest-message img { width: 14px; height: 14px; }
+
 #chat-title {
   margin: 0;
   font-size: 16px;
   font-weight: 750;
+  overflow-wrap: anywhere;
 }
 
 #chat-subtitle {
@@ -63,7 +75,6 @@ button:disabled {
   font-size: 12px;
 }
 
-#open-settings,
 #send-message,
 #clear-history {
   min-height: 34px;
@@ -109,11 +120,14 @@ button:disabled {
 }
 
 .bubble {
-  max-width: min(290px, 86vw);
   padding: 9px 11px;
   border-radius: 8px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  box-sizing: border-box;
+  min-width: 0;
+  width: fit-content;
+  max-width: 100%;
 }
 
 .user .bubble {

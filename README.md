@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
 
-**0.4.1 safety update:** safer handling of chat and voice responses, bounded downloads, and credential redaction in service errors. [Release notes and TTS compatibility](docs/releases/v0.4.1.md).
+**0.4.2 conversation update:** shared session-only drafts, quick-window retry, and steadier reading during streamed replies. [Release notes](docs/releases/v0.4.2.md). Includes the [0.4.1 safety fixes and TTS compatibility changes](docs/releases/v0.4.1.md).
 
 [![Build](https://github.com/TonyNa-code/desktop-pet/actions/workflows/build.yml/badge.svg)](https://github.com/TonyNa-code/desktop-pet/actions/workflows/build.yml)
 [![Latest Release](https://img.shields.io/github/v/release/TonyNa-code/desktop-pet?label=latest%20release)](https://github.com/TonyNa-code/desktop-pet/releases/latest)
@@ -116,6 +116,8 @@ Local builds are reliable for the current operating system. GitHub Actions build
 Change language from `right-click menu > Language` or `Chat Settings > General > Interface Language`. It affects menus, windows, bubbles, and the default chat language.
 
 Right-click the pet and choose `Chat > Quick Input` for a minimal companion-style input box. Replies appear directly in the pet bubble. Choose `Chat > Full Chat` for a floating chat window with history, or `Chat > Chat Settings` to configure the companion.
+
+Switch between Quick Input and Full Chat using their header buttons. Unsent text is shared between both windows, survives closing and reopening them, and stays separate for each character. Drafts are kept only for the current app session: quitting clears them even when saved history is enabled. Only sending a message submits that text to the model service. Quick Input supports Enter to send, Shift+Enter for a new line, and an explicit Retry after a failed or stopped reply. Reading older messages or selecting text is not interrupted by incoming reply tokens; use Latest reply to return to the bottom.
 
 The settings window opens automatically on first launch. `Persona` controls the character name, personality, speaking style, background, and extra rules. If left empty, the app uses the current character pack's default style.
 

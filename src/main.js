@@ -111,6 +111,8 @@ let focusTimer = null;
 let chatHistory = [];
 let chatRequest = null;
 let chatRevision = 0;
+const chatDrafts = new Map();
+let chatDraftVersion = 0;
 let characterSessions = {};
 let voiceError = false;
 let speechGeneration = 0;
@@ -154,6 +156,7 @@ async function removeCharacterImport(event, id) {
   if (settings.characterId === id) updateSettings({ characterId: DEFAULT_CHARACTER_ID });
   fs.rmSync(path.join(importedCharactersDir(), id), { recursive: true, force: true });
   delete characterSessions[id];
+  chatDrafts.delete(id);
   writeCharacterSessions();
   return { ok: true, ...chatState() };
 }
@@ -1133,6 +1136,7 @@ function chatState() {
     config: publicChatConfig(),
     history: publicChatHistory(),
     revision: chatRevision,
+    draft: chatDraftState(),
     busy: Boolean(chatRequest),
     pending: chatRequest ? { content: chatRequest.text, createdAt: chatRequest.createdAt, reply: chatRequest.reply || "" } : null,
     voiceError,
@@ -1152,6 +1156,27 @@ function chatState() {
       } : null;
     })(),
   };
+}
+
+function chatDraftState() {
+  return { characterId: settings.characterId, revision: chatRevision,
+    text: chatDrafts.get(settings.characterId) || "", version: chatDraftVersion };
+}
+
+function setChatDraft(event, draft = {}) {
+  if (!draft || typeof draft !== "object" || draft.characterId !== settings.characterId || draft.revision !== chatRevision
+    || typeof draft.text !== "string") return;
+  const text = draft.text.slice(0, 1200);
+  if (text) chatDrafts.set(settings.characterId, text);
+  else chatDrafts.delete(settings.characterId);
+  chatDraftVersion += 1;
+  // Mirror edits between composers without persisting unsent text.
+  for (const window of [chatWindow, quickChatWindow]) {
+    if (window && !window.isDestroyed()) {
+      window.webContents.send("chat-draft-updated", { ...chatDraftState(),
+        acknowledgedEdit: window.webContents === event?.sender ? draft.edit : undefined });
+    }
+  }
 }
 
 function cleanUserMessage(text) {
@@ -1423,7 +1448,10 @@ async function testTtsConnection(_event, patch = {}) {
   };
 }
 
-async function sendChatMessage(_event, rawText) {
+async function sendChatMessage(_event, rawText, context) {
+  if (context && (context.characterId !== settings.characterId || context.revision !== chatRevision)) {
+    return { ok: false, cancelled: true, error: "stale_chat", ...chatState() };
+  }
   const text = cleanUserMessage(rawText);
   if (!text) {
     return { ok: false, error: "empty_message", ...chatState() };
@@ -1927,6 +1955,7 @@ app.whenReady().then(() => {
   ipcMain.handle("send-chat-message", sendChatMessage);
   ipcMain.handle("clear-chat-history", clearChatHistory);
   ipcMain.handle("stop-chat", stopChat);
+  ipcMain.on("set-chat-draft", setChatDraft);
   ipcMain.handle("confirm-discard", confirmDiscard);
   ipcMain.handle("preview-character-import", previewCharacterImport);
   ipcMain.handle("confirm-character-import", confirmCharacterImport);

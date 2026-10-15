@@ -8,7 +8,13 @@ contextBridge.exposeInMainWorld("desktopPet", {
   testAssistantConnection: (patch) => ipcRenderer.invoke("test-assistant-connection", patch),
   listAssistantModels: (patch) => ipcRenderer.invoke("list-assistant-models", patch),
   testTtsConnection: (patch) => ipcRenderer.invoke("test-tts-connection", patch),
-  sendChatMessage: (text) => ipcRenderer.invoke("send-chat-message", text),
+  sendChatMessage: (text, context) => ipcRenderer.invoke("send-chat-message", text, context),
+  setChatDraft: (draft) => ipcRenderer.send("set-chat-draft", draft),
+  onChatDraftUpdated: (callback) => {
+    const listener = (_event, draft) => callback(draft);
+    ipcRenderer.on("chat-draft-updated", listener);
+    return () => ipcRenderer.off("chat-draft-updated", listener);
+  },
   clearChatHistory: () => ipcRenderer.invoke("clear-chat-history"),
   stopChat: () => ipcRenderer.invoke("stop-chat"),
   confirmDiscard: () => ipcRenderer.invoke("confirm-discard"),

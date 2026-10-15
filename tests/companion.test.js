@@ -99,5 +99,6 @@ test("quick conversation uses the configured character name and ignores IME conf
   assert.equal(ui.nodes.get("#character-name").textContent, "Custom");
   let prevented = false;
   ui.nodes.get("#quick-input").events.keydown({ key: "Enter", isComposing: true, preventDefault() { prevented = true; } });
-  assert.equal(prevented, true);
+  assert.equal(prevented, false);
+  assert.equal(ui.run("sending"), false);
 });

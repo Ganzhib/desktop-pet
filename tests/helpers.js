@@ -57,7 +57,7 @@ function loadRenderer(file, api = {}, htmlFile = file.replace(/\.js$/, ".html"))
     return {
       value: "", textContent: "", disabled: false, checked: false, dataset: {}, events: {},
       children: [], append(...children) { this.children.push(...children); }, replaceChildren(...children) { this.children = children; },
-      focus() {}, setAttribute() {}, classList: { toggle() {}, add() {}, remove() {} },
+      focus() {}, blur() {}, remove() {}, setAttribute() {}, classList: { toggle() {}, add() {}, remove() {} },
       querySelector() { return element(); },
       addEventListener(name, callback) { this.events[name] = callback; },
     };
@@ -82,9 +82,13 @@ function loadRenderer(file, api = {}, htmlFile = file.replace(/\.js$/, ".html"))
       DesktopPetValidation: require("../src/config-validation"),
       DesktopPetLlmPresets: require("../src/llm-presets"),
       addEventListener() {}, close() {},
-      desktopPet: { getChatState: () => new Promise(() => {}), onChatStateUpdated() {}, ...api },
+      desktopPet: { getChatState: () => new Promise(() => {}), onChatStateUpdated() {},
+        setChatDraft() {}, onChatDraftUpdated() {}, ...api },
     },
   });
+  if (["chat.js", "quick-chat.js"].includes(file)) {
+    vm.runInContext(fs.readFileSync(path.join(sourceDir, "chat-draft.js"), "utf8"), context);
+  }
   vm.runInContext(fs.readFileSync(path.join(sourceDir, file), "utf8"), context);
   return { context, nodes, run: (code) => vm.runInContext(code, context) };
 }

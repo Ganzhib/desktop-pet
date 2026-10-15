@@ -106,6 +106,7 @@ async function run() {
     assert.equal(state.settings.tts.provider, "custom");
     assert.equal(state.settings.affection.enabled, false);
     const history = (await evaluate(pet, () => window.desktopPet.getChatState())).history;
+    assert.equal((await evaluate(pet, () => window.desktopPet.getChatState())).draft.text, "");
     assert.ok(history.some((item) => item.content === "Remember this message"));
     const memory = (await evaluate(pet, () => window.desktopPet.getChatState())).config.memory;
     assert.deepEqual(memory, { enabled: true, notes: ["Enjoys piano on rainy days"] });
@@ -187,7 +188,7 @@ async function run() {
     && JSON.parse(fs.readFileSync(path.join(dataDir, "settings.json"))).persona.name === "Test Character", "saved settings");
   await screenshot(settings, "settings");
   await evaluate(pet, () => window.desktopPet.openChatWindow());
-  const chat = await findWindow("chat.html");
+  let chat = await findWindow("chat.html");
   async function send(message) {
     await evaluate(chat, (text) => {
       document.querySelector("#message-input").value = text;
@@ -248,8 +249,36 @@ async function run() {
   await until(() => evaluate(chat, async () => (await window.desktopPet.getChatState()).config.memory.notes.length === 1), "memory ready for restart");
 
   await evaluate(pet, () => document.querySelector("#talk").click());
-  const quick = await findWindow("quick-chat.html");
+  let quick = await findWindow("quick-chat.html");
   assert.equal(await evaluate(quick, () => document.querySelector("#character-name").textContent), "Test Character");
+  const draftText = "An unsent thought\nA second line";
+  await evaluate(quick, (text) => {
+    const input = document.querySelector("#quick-input");
+    input.value = text;
+    input.dispatchEvent(new Event("input"));
+  }, draftText);
+  await until(() => evaluate(chat, (text) => document.querySelector("#message-input").value === text, draftText), "draft mirrored into full chat");
+  await evaluate(quick, () => document.querySelector("#history").click());
+  await until(() => quick.isDestroyed(), "quick mode closed after switching");
+  await evaluate(pet, () => window.desktopPet.openQuickChatWindow());
+  quick = await findWindow("quick-chat.html");
+  await until(() => evaluate(quick, (text) => document.querySelector("#quick-input").value === text, draftText), "draft recovered after reopening");
+  assert.doesNotMatch(fs.readFileSync(path.join(dataDir, "characters-state.json"), "utf8"), /An unsent thought/);
+  await evaluate(quick, () => {
+    const input = document.querySelector("#quick-input");
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", isComposing: true }));
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", shiftKey: true }));
+  });
+  assert.equal((await evaluate(quick, () => window.desktopPet.getChatState())).busy, false);
+  await evaluate(pet, () => window.desktopPet.setSettings({ characterId: "luna" }));
+  await until(() => evaluate(quick, () => document.querySelector("#quick-input").value === ""), "new character has no old draft");
+  await evaluate(pet, () => window.desktopPet.setSettings({ characterId: "default" }));
+  await until(() => evaluate(quick, (text) => document.querySelector("#quick-input").value === text, draftText), "character draft restored");
+  await evaluate(quick, () => {
+    const input = document.querySelector("#quick-input");
+    input.value = "";
+    input.dispatchEvent(new Event("input"));
+  });
   const originalPetBounds = pet.getBounds();
   const beforeQuick = quick.getBounds();
   pet.setPosition(originalPetBounds.x - 100, originalPetBounds.y - 40);
@@ -285,9 +314,30 @@ async function run() {
   assert.equal(await evaluate(pet, () => document.querySelector("#speech-bubble").textContent.includes("[expression:")), false);
   assert.equal(await evaluate(chat, () => document.querySelector("#stop-message").hidden), false);
   const longReply = "Long reply ".repeat(220);
+  await evaluate(chat, () => {
+    window.savedBubble = document.querySelector(".bubble");
+    const range = document.createRange();
+    range.selectNodeContents(window.savedBubble);
+    window.getSelection().removeAllRanges();
+    window.getSelection().addRange(range);
+    window.savedSelection = window.getSelection().toString();
+    document.querySelector("#messages").scrollTop = 0;
+    document.querySelector("#open-settings").focus();
+  });
   streamResponse.write(`data: ${JSON.stringify({ choices: [{ delta: { content: longReply }, finish_reason: "stop" }] })}\n\n`);
   streamResponse.end("data: [DONE]\n\n");
   await until(() => evaluate(chat, () => !document.querySelector("#send-message").disabled), "stream completion");
+  assert.equal(await evaluate(chat, () => window.savedBubble === document.querySelector(".bubble")
+    && window.getSelection().toString() === window.savedSelection), true);
+  assert.equal(await evaluate(chat, () => document.activeElement.id), "open-settings");
+  await evaluate(chat, () => {
+    const messages = document.querySelector("#messages");
+    messages.scrollTop = 0;
+    messages.dispatchEvent(new Event("scroll"));
+  });
+  assert.equal(await evaluate(chat, () => document.querySelector("#latest-message").hidden), false);
+  await evaluate(chat, () => document.querySelector("#latest-message").click());
+  assert.equal(await evaluate(chat, () => document.querySelector("#latest-message").hidden), true);
   assert.equal((await evaluate(chat, () => window.desktopPet.getChatState())).history.at(-1).content, `First paragraph\n\n${longReply.trim()}`);
   assert.equal(await evaluate(pet, () => document.querySelector("#speech-bubble").textContent), `First paragraph\n\n${longReply.trim()}`);
   await evaluate(pet, () => document.querySelector("#speech-bubble").dispatchEvent(new MouseEvent("mouseenter")));
@@ -304,9 +354,25 @@ async function run() {
   await until(() => evaluate(chat, () => !document.querySelector("#send-message").disabled), "stop from other window");
   assert.equal((await evaluate(chat, () => window.desktopPet.getChatState())).history.at(-1).failed, true);
   assert.equal(await evaluate(chat, () => document.querySelector("#retry-message").hidden), false);
+  assert.equal(await evaluate(quick, () => document.querySelector("#retry-message").hidden), false);
   streamResponse.end("data: [DONE]\n\n");
   await send("After stop");
   assert.equal(requests.at(-1).messages.some((item) => item.content === "Stopped stream"), false);
+
+  await evaluate(quick, () => {
+    const input = document.querySelector("#quick-input");
+    input.value = "Failure message";
+    input.dispatchEvent(new Event("input"));
+    document.querySelector("#send").click();
+  });
+  await until(() => evaluate(quick, () => !document.querySelector("#retry-message").hidden), "quick failure offers retry");
+  assert.equal(await evaluate(quick, () => document.querySelector("#quick-input").value), "Failure message");
+  const beforeRetry = requests.length;
+  await evaluate(quick, () => { document.querySelector("#retry-message").click(); document.querySelector("#retry-message").click(); });
+  await until(() => evaluate(quick, () => !document.querySelector("#send").disabled), "explicit retry completed");
+  assert.equal(requests.length, beforeRetry + 1);
+  await screenshot(quick, "quick-retry");
+  await send("Recovered from retry");
 
   for (const language of ["ja-JP", "zh-CN", "en-US"]) {
     await evaluate(pet, (value) => window.desktopPet.setSettings({ language: value }), language);
@@ -376,6 +442,10 @@ async function run() {
   }
   await screenshot(pet, "pet-speaking");
   await screenshot(quick, "quick-speaking");
+  assert.equal(await evaluate(quick, () => ["#quick-input", ".quick-feedback", "#voice-controls"].every((selector) => {
+    const rect = document.querySelector(selector).getBoundingClientRect();
+    return rect.top >= 0 && rect.bottom <= innerHeight && rect.right <= innerWidth;
+  })), true);
   await screenshot(chat, "chat-speaking");
   const replayText = await evaluate(pet, () => speechBubble.textContent);
   await evaluate(pet, () => document.querySelector("#voice-toggle").click());
@@ -492,6 +562,32 @@ async function run() {
   });
   assert.equal(await evaluate(settings, () => !document.querySelector("#custom-relationship-row").hidden), true);
   await screenshot(settings, "settings-relationship");
+  chat.setSize(320, 360);
+  for (const language of ["zh-CN", "ja-JP", "en-US"]) {
+    await evaluate(pet, (value) => window.desktopPet.setSettings({ language: value }), language);
+    await until(() => evaluate(chat, (value) => document.documentElement.lang === value, language), "minimum chat language");
+    assert.equal(await evaluate(chat, () => ["#message-input", ".chat-footer", ".chat-actions"].every((selector) => {
+      const rect = document.querySelector(selector).getBoundingClientRect();
+      return rect.left >= 0 && rect.right <= innerWidth && rect.top >= 0 && rect.bottom <= innerHeight;
+    })), true);
+    assert.equal(await evaluate(chat, () => [...document.querySelectorAll(".chat-actions img, #latest-message img")]
+      .every((img) => img.complete && img.naturalWidth > 0)), true);
+    assert.equal(await evaluate(chat, () => document.querySelector("#latest-message").hidden
+      || document.querySelector("#latest-message").getBoundingClientRect().top >= document.querySelector("#messages").getBoundingClientRect().bottom), true);
+    await screenshot(chat, `chat-minimum-${language}`);
+  }
+  await evaluate(quick, () => {
+    const input = document.querySelector("#quick-input");
+    input.value = "Draft must disappear after quitting";
+    input.dispatchEvent(new Event("input"));
+  });
+  await until(() => evaluate(chat, () => document.querySelector("#message-input").value === "Draft must disappear after quitting"), "final draft sync");
+  assert.doesNotMatch(fs.readFileSync(path.join(dataDir, "characters-state.json"), "utf8"), /Draft must disappear/);
+  await evaluate(chat, () => document.querySelector("#quick-mode").click());
+  await until(() => chat.isDestroyed(), "full chat switches to quick mode");
+  await evaluate(pet, () => window.desktopPet.openChatWindow());
+  chat = await findWindow("chat.html");
+  await until(() => evaluate(chat, () => document.querySelector("#message-input").value === "Draft must disappear after quitting"), "full chat recovers shared draft");
   await screenshot(quick, "quick-input");
   for (const window of [pet, settings, chat, quick]) {
     assert.deepEqual(await evaluate(window, () => window.smokeErrors), []);

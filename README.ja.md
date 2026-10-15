@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
 
-**0.4.1 安全性の更新：**チャット・音声応答の検証、ダウンロード量の制限、サービスエラーに含まれるキーの非表示を追加しました。[更新内容と TTS の互換性](docs/releases/v0.4.1.md)。
+**0.4.2 会話の改善：**ウィンドウ間の一時的な下書き共有、クイック入力での再試行、逐次返信中の読みやすさを改善しました。[更新内容](docs/releases/v0.4.2.md)。[0.4.1 の安全性修正と TTS 互換性の変更](docs/releases/v0.4.1.md)も含みます。
 
 [![Build](https://github.com/TonyNa-code/desktop-pet/actions/workflows/build.yml/badge.svg)](https://github.com/TonyNa-code/desktop-pet/actions/workflows/build.yml)
 [![Latest Release](https://img.shields.io/github/v/release/TonyNa-code/desktop-pet?label=latest%20release)](https://github.com/TonyNa-code/desktop-pet/releases/latest)
@@ -110,6 +110,8 @@ npm run build
 言語は `右クリックメニュー > 言語` または `会話設定 > 一般 > 表示言語` から変更できます。メニュー、ウィンドウ、吹き出し、会話の既定言語に反映されます。
 
 ペットを右クリックして `会話 > クイック入力` を選ぶと、リアルタイム陪伴向けの最小入力欄が開きます。返信はペットの吹き出しに直接表示されます。`会話 > チャット画面` では履歴付きの小さなフローティングチャット、`会話 > 会話設定` では設定画面を開けます。
+
+上部のボタンでクイック入力とチャット画面を切り替えても、未送信の文章は共有されます。閉じて開き直しても続けて入力でき、下書きはキャラクターごとに分離されます。下書きは実行中のメモリにのみ保持され、履歴保存が有効でもアプリ終了時に消えます。送信するまでモデルサービスには渡されません。クイック入力は Enter で送信、Shift+Enter で改行でき、失敗・停止後は手動で再試行できます。逐次返信中も既存の吹き出しを作り直さず、過去の文章の選択を保ちます。「最新の返信」で末尾へ戻れます。
 
 初回起動時には設定画面が自動で開きます。`人物設定` はキャラクター名、性格、話し方、背景、追加ルールに影響します。未入力の場合は現在のキャラクターパックの既定スタイルを使います。
 

@@ -16,6 +16,7 @@
 
   const DICTIONARIES = {
     "zh-CN": {
+      "chat.latest": "最新回复",
       "tts.audioOrigin": "语音链接与服务地址不属于同一来源，请让服务直接返回音频或同来源链接。",
       "tts.responseTooLarge": "语音响应过大，请缩短文本或调整服务输出。",
       "settings.tabs.general": "通用",
@@ -354,6 +355,7 @@
     },
 
     "en-US": {
+      "chat.latest": "Latest reply",
       "tts.audioOrigin": "The audio link must use the same origin as the voice service. Use direct audio or a same-origin link.",
       "tts.responseTooLarge": "The voice response is too large. Shorten the text or adjust the service output.",
       "settings.tabs.general": "General",
@@ -692,6 +694,7 @@
     },
 
     "ja-JP": {
+      "chat.latest": "最新の返信",
       "tts.audioOrigin": "音声リンクはサービスと同じオリジンである必要があります。音声を直接返すか、同一オリジンのリンクを使用してください。",
       "tts.responseTooLarge": "音声応答が大きすぎます。文章を短くするか、サービスの出力を調整してください。",
       "settings.tabs.general": "一般",

@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
 
-**0.4.1 安全更新：**加强聊天与语音响应的边界检查，限制下载大小，并隐藏服务报错中的密钥。[更新说明与 TTS 兼容性](docs/releases/v0.4.1.md)。
+**0.4.2 对话体验更新：**窗口间共享临时草稿，小窗支持失败重试，流式回复不再反复重建聊天记录。[更新说明](docs/releases/v0.4.2.md)。包含 [0.4.1 安全修复与 TTS 兼容性调整](docs/releases/v0.4.1.md)。
 
 [![Build](https://github.com/TonyNa-code/desktop-pet/actions/workflows/build.yml/badge.svg)](https://github.com/TonyNa-code/desktop-pet/actions/workflows/build.yml)
 [![Latest Release](https://img.shields.io/github/v/release/TonyNa-code/desktop-pet?label=latest%20release)](https://github.com/TonyNa-code/desktop-pet/releases/latest)
@@ -110,6 +110,8 @@ npm run build
 语言可以在 `右键菜单 > 语言` 或 `对话设置 > 通用 > 界面语言` 里切换。它会影响菜单、窗口、提示气泡和默认对话语言。
 
 右键桌宠，选择 `对话 > 快速输入` 会打开极简输入框，适合实时陪伴式对话，回复会直接出现在桌宠气泡里。选择 `对话 > 完整聊天` 会打开带聊天记录的小型悬浮聊天窗。选择 `对话 > 对话设置`，或在聊天窗里点 `设置`，会打开单独的设置窗口。
+
+通过窗口顶部按钮可在快速输入与完整聊天间切换，未发送的文字会同步保留；关闭窗口再打开也能接着写，各角色的草稿互不混用。草稿只在本次运行的内存中暂存，退出应用后清除，即使开启了聊天记录保存也不会保存草稿。只有点击发送才会把文字交给模型服务。快速输入支持 Enter 发送、Shift+Enter 换行，失败或停止后可以手动重试。查看旧消息或选择文字时，新回复不会反复重建已有气泡；点“最新回复”可回到底部。
 
 第一次打开应用时会自动弹出设置窗口。`人物设定` 会影响角色称呼、性格、说话方式、背景设定和额外规则。没有填写时，应用会使用当前角色包的默认风格。
 
